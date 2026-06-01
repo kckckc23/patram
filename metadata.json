@@ -1,0 +1,6 @@
+{
+  "name": "PDF Tools",
+  "description": "A secure client-side utility for merging, splitting, and removing pages from PDF files completely offline in your browser.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
