@@ -106,7 +106,7 @@ export default function SplitTools() {
     setSuccessMsg(null);
 
     if (!file) {
-      setError('Please select or upload a valid PDF file first.');
+      setError('Please select a valid PDF file first.');
       return;
     }
 
@@ -172,7 +172,7 @@ export default function SplitTools() {
               Drag & drop your PDF here, or <span className="text-orange-700 underline text-sm">browse local files</span>
             </p>
             <span className="text-[11px] text-stone-400 mt-2 block">
-              Max page limit depends on local browser memory. No data is uploaded.
+              Max page limit depends on local browser memory. No files or document sheets ever leave your device.
             </span>
           </div>
         ) : isLoadingFile ? (

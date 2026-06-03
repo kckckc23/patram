@@ -16,3 +16,7 @@ export interface OperationLog {
   type: 'success' | 'error' | 'info';
   message: string;
 }
+
+declare module 'docx-preview';
+declare module 'html2pdf.js';
+

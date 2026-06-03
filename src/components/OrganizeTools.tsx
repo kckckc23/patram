@@ -50,7 +50,7 @@ export default function OrganizeTools() {
         setFile(selectedFile);
         loadPdfDocument(selectedFile);
       } else {
-        setError('Please upload a valid PDF document.');
+        setError('Please select a valid PDF document.');
       }
     }
   };

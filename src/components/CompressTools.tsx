@@ -43,7 +43,7 @@ export default function CompressTools() {
         setFile(selectedFile);
         setOriginalSize(selectedFile.size);
       } else {
-        setError('Please upload a valid PDF document.');
+        setError('Please select a valid PDF document.');
       }
     }
   };

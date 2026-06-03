@@ -19,7 +19,7 @@ app.use(express.json());
 
 // API health check
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", service: "PDFly Full-Stack Conversion Suite" });
+  res.json({ status: "ok", service: "PDFly Secure Local Sandbox Engine" });
 });
 
 /**
@@ -526,7 +526,7 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[PDFly Engine] Running full-stack environment on http://localhost:${PORT}`);
+    console.log(`[PDFly Engine] Running secure local sandbox environment on http://localhost:${PORT}`);
   });
 }
 
