@@ -118,7 +118,7 @@ export default function OcrTools() {
       if (selectedFile.type === 'application/pdf' || selectedFile.name.endsWith('.pdf')) {
         setFile(selectedFile);
       } else {
-        setError('Please upload a valid PDF document.');
+        setError('Please select a valid PDF document.');
       }
     }
   };

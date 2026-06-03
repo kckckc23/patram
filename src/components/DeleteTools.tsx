@@ -114,7 +114,7 @@ export default function DeleteTools() {
     setSuccessMsg(null);
 
     if (!file) {
-      setError('Please select or upload a valid PDF file first.');
+      setError('Please select a valid PDF file first.');
       return;
     }
 

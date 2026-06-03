@@ -36,7 +36,7 @@ export default function MergeTools() {
       return;
     }
 
-    // Add immediate skeletal states for uploaded files
+    // Add immediate skeletal states for selected files
     const initializedFiles = validPdfFiles.map(file => {
       const id = crypto.randomUUID();
       return {
