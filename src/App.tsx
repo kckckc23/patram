@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { ActiveTab } from './types';
 import Header from './components/Header';
 import MergeTools from './components/MergeTools';
-import SplitTools from './components/SplitTools';
-import DeleteTools from './components/DeleteTools';
-import CompressTools from './components/CompressTools';
-import OcrTools from './components/OcrTools';
-import OrganizeTools from './components/OrganizeTools';
-import ConverterTools from './components/ConverterTools';
+
+// Code-splitting optimized workspaces: loaded dynamically on-demand
+const SplitTools = lazy(() => import('./components/SplitTools'));
+const DeleteTools = lazy(() => import('./components/DeleteTools'));
+const CompressTools = lazy(() => import('./components/CompressTools'));
+const OcrTools = lazy(() => import('./components/OcrTools'));
+const OrganizeTools = lazy(() => import('./components/OrganizeTools'));
+const ConverterTools = lazy(() => import('./components/ConverterTools'));
 import { 
   FolderSync, 
   Scissors, 
@@ -231,7 +233,22 @@ export default function App() {
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ duration: 0.15, ease: 'easeOut' }}
                 >
-                  {renderActiveTool()}
+                  <Suspense fallback={
+                    <div className="animate-pulse flex flex-col gap-6">
+                      <div>
+                        <div className="h-6 bg-stone-100 rounded-lg w-1/3 mb-2"></div>
+                        <div className="h-3.5 bg-stone-100 rounded-lg w-2/3"></div>
+                      </div>
+                      <div className="h-48 bg-stone-50/50 border border-stone-200/80 border-dashed rounded-2xl flex flex-col items-center justify-center gap-2">
+                        <div className="h-10 w-10 rounded-xl bg-stone-100 flex items-center justify-center">
+                          <div className="h-4 w-4 rounded-full border-2 border-orange-500 border-t-transparent animate-spin"></div>
+                        </div>
+                        <span className="text-[11px] text-stone-400 font-mono font-bold tracking-tight">MOUNTING SANDBOX SUITE CORE...</span>
+                      </div>
+                    </div>
+                  }>
+                    {renderActiveTool()}
+                  </Suspense>
                 </motion.div>
               </AnimatePresence>
             </div>
