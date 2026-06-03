@@ -8,7 +8,7 @@ export interface PdfDocFile {
   error?: string;
 }
 
-export type ActiveTab = 'merge' | 'split' | 'delete';
+export type ActiveTab = 'merge' | 'split' | 'delete' | 'compress' | 'ocr' | 'organize' | 'converter';
 
 export interface OperationLog {
   id: string;
