@@ -4,6 +4,10 @@ import Header from './components/Header';
 import MergeTools from './components/MergeTools';
 import SplitTools from './components/SplitTools';
 import DeleteTools from './components/DeleteTools';
+import CompressTools from './components/CompressTools';
+import OcrTools from './components/OcrTools';
+import OrganizeTools from './components/OrganizeTools';
+import ConverterTools from './components/ConverterTools';
 import { 
   FolderSync, 
   Scissors, 
@@ -11,7 +15,11 @@ import {
   ShieldCheck, 
   HelpCircle, 
   FileCode,
-  ArrowRight
+  ArrowRight,
+  Minimize2,
+  Sparkles,
+  Sliders,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -27,6 +35,14 @@ export default function App() {
         return <SplitTools />;
       case 'delete':
         return <DeleteTools />;
+      case 'compress':
+        return <CompressTools />;
+      case 'ocr':
+        return <OcrTools />;
+      case 'organize':
+        return <OrganizeTools />;
+      case 'converter':
+        return <ConverterTools />;
       default:
         return <MergeTools />;
     }
@@ -37,6 +53,10 @@ export default function App() {
       case 'merge': return 'Merge PDFs';
       case 'split': return 'Split PDF';
       case 'delete': return 'Delete Pages';
+      case 'compress': return 'Compress PDF';
+      case 'ocr': return 'OCR Analyzer';
+      case 'organize': return 'Organize & Rotate';
+      case 'converter': return 'Convert PDF Suite';
     }
   };
 
@@ -54,7 +74,7 @@ export default function App() {
           {/* Left Hand Sidebar Navigation Controls */}
           <div className="lg:col-span-1 flex flex-col gap-4">
             <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm flex flex-col gap-1">
-              <span className="text-[10px] uppercase font-bold text-stone-400 tracking-widest px-3 mb-2 block">
+              <span className="text-[10px] uppercase font-bold text-stone-400 tracking-widest px-3 mb-2 block animate-pulse">
                 Workspace Utilities
               </span>
               
@@ -108,6 +128,75 @@ export default function App() {
                 </div>
                 {activeTab !== 'delete' && <ArrowRight className="h-3.5 w-3.5 opacity-50 shrink-0" />}
               </button>
+
+              {/* Tab: Compress PDF */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('compress')}
+                className={`w-full text-left flex items-center justify-between px-4 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                  activeTab === 'compress'
+                    ? 'bg-orange-50 text-orange-700 border border-orange-100/85'
+                    : 'bg-transparent text-stone-500 hover:text-stone-800 hover:bg-stone-50 border border-transparent'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Minimize2 className="h-4.5 w-4.5 shrink-0 text-orange-600" />
+                  <span>Compress PDF</span>
+                </div>
+                {activeTab !== 'compress' && <ArrowRight className="h-3.5 w-3.5 opacity-50 shrink-0" />}
+              </button>
+
+              {/* Tab: OCR Scan */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('ocr')}
+                className={`w-full text-left flex items-center justify-between px-4 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                  activeTab === 'ocr'
+                    ? 'bg-orange-50 text-orange-700 border border-orange-100/85'
+                    : 'bg-transparent text-stone-500 hover:text-stone-800 hover:bg-stone-50 border border-transparent'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Sparkles className="h-4.5 w-4.5 shrink-0 text-orange-600 animate-spin" />
+                  <span>OCR PDF scan</span>
+                </div>
+                {activeTab !== 'ocr' && <ArrowRight className="h-3.5 w-3.5 opacity-50 shrink-0" />}
+              </button>
+
+              {/* Tab: Organize visual */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('organize')}
+                className={`w-full text-left flex items-center justify-between px-4 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                  activeTab === 'organize'
+                    ? 'bg-orange-50 text-orange-700 border border-orange-100/85'
+                    : 'bg-transparent text-stone-500 hover:text-stone-800 hover:bg-stone-50 border border-transparent'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Sliders className="h-4.5 w-4.5 shrink-0 text-orange-600" />
+                  <span>Organize & Rotate</span>
+                </div>
+                {activeTab !== 'organize' && <ArrowRight className="h-3.5 w-3.5 opacity-50 shrink-0" />}
+              </button>
+
+              {/* Tab: Converters */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('converter')}
+                className={`w-full text-left flex items-center justify-between px-4 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                  activeTab === 'converter'
+                    ? 'bg-orange-50 text-orange-700 border border-orange-100/85'
+                    : 'bg-transparent text-stone-500 hover:text-stone-800 hover:bg-stone-50 border border-transparent'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <RefreshCw className="h-4.5 w-4.5 shrink-0 text-orange-600" />
+                  <span>Convert PDF Suite</span>
+                </div>
+                {activeTab !== 'converter' && <ArrowRight className="h-3.5 w-3.5 opacity-50 shrink-0" />}
+              </button>
+
             </div>
 
             {/* Quick Specs Utility card */}
