@@ -159,7 +159,7 @@ export default function App() {
                 }`}
               >
                 <div className="flex items-center gap-2.5">
-                  <Sparkles className="h-4.5 w-4.5 shrink-0 text-orange-600 animate-spin" />
+                  <Sparkles className="h-4.5 w-4.5 shrink-0 text-orange-600" />
                   <span>OCR PDF scan</span>
                 </div>
                 {activeTab !== 'ocr' && <ArrowRight className="h-3.5 w-3.5 opacity-50 shrink-0" />}

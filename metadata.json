@@ -1,6 +1,6 @@
 {
-  "name": "PDF Tools",
-  "description": "A secure client-side utility for merging, splitting, and removing pages from PDF files completely offline in your browser.",
+  "name": "PDFly - Complete PDF Workspace Suite",
+  "description": "An enterprise-grade, client-side PDF workspace designed with high-performance conversion tools (PDF to Word/Excel/PowerPoint) and local OCR normalization.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
