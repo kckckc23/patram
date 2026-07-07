@@ -1,0 +1,10 @@
+{
+  "name": "pdf-tools-test",
+  "private": true,
+  "type": "module",
+  "description": "Headless Node+Pyodide harness that verifies pdf_tools.py. Dev-only; the deployed static site never uses node_modules.",
+  "dependencies": {
+    "puppeteer": "^23.11.1",
+    "pyodide": "^0.28.1"
+  }
+}

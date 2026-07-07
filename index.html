@@ -1,28 +1,46 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PDFly - High Performance Client-Side PDF Workspace Suite</title>
-    <meta name="description" content="An enterprise-grade, browser-based online PDF manager designed with robust SSL client-side safety. Merge, split, compress, organize, and perform OCR entirely offline." />
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PDF Tools — runs on your machine, not a server</title>
+  <meta name="description" content="A private PDF toolkit. Merge, split, compress, OCR and convert PDFs — all processed by Python running in your browser. Your files never leave your device." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="wordmark">
+        <span class="glyph">P</span>
+        <span>
+          <b>pdftools<span class="tld">.local</span></b>
+          <small>on-device runtime</small>
+        </span>
+      </div>
 
-    <!-- Performance Optimization: DNS Prefetch & Preconnect for CDN resources -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
-    <link rel="preconnect" href="https://unpkg.com" />
-    
-    <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
-    <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
-    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com" />
-    <link rel="dns-prefetch" href="https://unpkg.com" />
+      <!-- signature: live engine readout -->
+      <div class="runtime" id="runtime" data-state="booting" role="status" aria-live="polite" title="The Python engine runs on your machine">
+        <span class="led" aria-hidden="true"></span>
+        <span class="rt-label">runtime</span>
+        <span class="rt-msg" id="rtMsg">starting…</span>
+      </div>
+    </header>
 
-    <!-- Google fonts loading with swap displaying fallback -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+    <main class="console">
+      <nav class="rail" id="rail" aria-label="Tools"></nav>
+      <section class="stage" id="stage" aria-live="polite"></section>
+    </main>
+
+    <footer class="foot">
+      <span>NO UPLOAD · PROCESSED IN-BROWSER VIA PYODIDE (PYTHON/WASM)</span>
+      <span>WORKS OFFLINE ONCE LOADED</span>
+    </footer>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
 </html>
-
