@@ -1,0 +1,6 @@
+Region,Product,Units,Revenue,Status
+North,Widget A,1240,"$14,880",Shipped
+South,Widget B,980,"$11,760",Pending
+East,Gadget C,2310,"$34,650",Shipped
+West,Gadget D,1750,"$26,250",Backorder
+Central,Widget A,640,"$7,680",Shipped
