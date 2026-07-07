@@ -17,7 +17,7 @@ import autoTable from 'jspdf-autotable';
 type ConvertDirection = 
   | 'pdfToImg' | 'imgToPdf' | 'pdfToTxt' | 'htmlToPdf'
   | 'pdfToWord' | 'wordToPdf' | 'pdfToExcel' | 'excelToPdf'
-  | 'pdfToPpt' | 'pptToPdf';
+  | 'pdfToPpt' | 'pptToPdf' | 'txtToPdf';
 
 interface ConverterCard {
   id: ConvertDirection;
@@ -181,6 +181,14 @@ export default function ConverterTools() {
       badge: 'Workspace',
       badgeStyle: 'bg-blue-50 text-blue-850 border-blue-150',
     },
+    {
+      id: 'txtToPdf',
+      title: 'TXT to PDF Converter',
+      desc: 'Convert plain text (.txt) files into structured, multi-page vector PDFs with dynamic line wrapping, page breaks, margins, and headers.',
+      icon: FileText,
+      badge: 'Local-Only',
+      badgeStyle: 'bg-emerald-50 text-emerald-800 border-emerald-150',
+    },
   ];
 
   // ==========================================
@@ -202,7 +210,7 @@ export default function ConverterTools() {
       const pdf = await loadingTask.promise;
       const totalPages = pdf.numPages;
 
-      const paragraphsList: string[] = [];
+      const docxParagraphs: docx.Paragraph[] = [];
       setProgressMsg(`Parsing ${totalPages} page(s) for layout elements...`);
 
       for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
@@ -213,43 +221,88 @@ export default function ConverterTools() {
 
         if (items.length === 0) continue;
 
-        // Sort items by layout coordinates: top-to-bottom, left-to-right
-        const sortedItems = [...items].sort((a, b) => {
-          const yA = a.transform[5];
-          const yB = b.transform[5];
-          if (Math.abs(yA - yB) < 6) {
-            return a.transform[4] - b.transform[4];
-          }
-          return yB - yA;
-        });
-
-        // Group into lines
-        let currentY = sortedItems[0]?.transform[5] ?? 0;
-        let currentLine: string[] = [];
-        const lines: string[] = [];
-
-        for (const item of sortedItems) {
+        // Group text items with similar Y-coordinates (tolerance of 6pt)
+        const linesMap: { y: number; items: any[] }[] = [];
+        for (const item of items) {
           const y = item.transform[5];
-          if (Math.abs(y - currentY) < 6) {
-            currentLine.push(item.str);
+          let line = linesMap.find(l => Math.abs(l.y - y) < 6);
+          if (line) {
+            line.items.push(item);
           } else {
-            if (currentLine.length > 0) {
-              lines.push(currentLine.join(' '));
-            }
-            currentLine = [item.str];
-            currentY = y;
+            linesMap.push({ y, items: [item] });
           }
         }
-        if (currentLine.length > 0) {
-          lines.push(currentLine.join(' '));
+
+        // Sort lines by Y descending (top to bottom)
+        linesMap.sort((a, b) => b.y - a.y);
+
+        // For each line, sort items by X ascending (left to right) and format
+        for (const line of linesMap) {
+          line.items.sort((a, b) => a.transform[4] - b.transform[4]);
+
+          const itemsInfo = line.items.map(item => {
+            const style = textContent.styles[item.fontName];
+            const fontStr = ((style?.fontFamily || '') + '_' + item.fontName).toLowerCase();
+            const isBold = fontStr.includes('bold') || fontStr.includes('black') || fontStr.includes('heavy') || fontStr.includes('semibold') || fontStr.includes('gothic');
+            
+            const transformSize = Math.abs(item.transform[3]);
+            const fontSize = item.height || transformSize || 10;
+            return {
+              str: item.str,
+              fontSize,
+              isBold,
+            };
+          });
+
+          // Merge contiguous text runs with identical styles
+          const mergedItems: { str: string; fontSize: number; isBold: boolean }[] = [];
+          for (const info of itemsInfo) {
+            const cleanedText = cleanAndNormalizeUnicode(info.str);
+            if (!cleanedText) continue;
+
+            if (mergedItems.length > 0) {
+              const last = mergedItems[mergedItems.length - 1];
+              if (last.fontSize === info.fontSize && last.isBold === info.isBold) {
+                last.str += (last.str.endsWith(' ') || cleanedText.startsWith(' ') ? '' : ' ') + cleanedText;
+              } else {
+                mergedItems.push({
+                  str: cleanedText,
+                  fontSize: info.fontSize,
+                  isBold: info.isBold
+                });
+              }
+            } else {
+              mergedItems.push({
+                str: cleanedText,
+                fontSize: info.fontSize,
+                isBold: info.isBold
+              });
+            }
+          }
+
+          if (mergedItems.length > 0) {
+            const maxFontSize = Math.max(...mergedItems.map(mi => mi.fontSize));
+            const isLineHeading = maxFontSize >= 14;
+            const paragraphHeading = isLineHeading 
+              ? (maxFontSize >= 18 ? docx.HeadingLevel.HEADING_1 : docx.HeadingLevel.HEADING_2) 
+              : undefined;
+
+            const docxParagraph = new docx.Paragraph({
+              heading: paragraphHeading,
+              spacing: { before: isLineHeading ? 220 : 120, after: 120, line: 240 },
+              children: mergedItems.map(mi => {
+                return new docx.TextRun({
+                  text: mi.str,
+                  font: "Arial",
+                  size: Math.round(mi.fontSize * 2),
+                  bold: mi.isBold,
+                  color: isLineHeading ? "111827" : "374151"
+                });
+              })
+            });
+            docxParagraphs.push(docxParagraph);
+          }
         }
-
-        // Apply Unicode cleaning mappings
-        const pageParas = lines
-          .map(line => cleanAndNormalizeUnicode(line))
-          .filter(line => line.length > 0);
-
-        paragraphsList.push(...pageParas);
       }
 
       setProgressMsg("Formatting structured Rich text Document lines (.docx)...");
@@ -258,27 +311,7 @@ export default function ConverterTools() {
         sections: [
           {
             properties: {},
-            children: paragraphsList.map(text => {
-              const isHeader = text.length < 90 && (
-                text.toUpperCase() === text || 
-                text.startsWith('Section') || 
-                text.startsWith('Chapter') ||
-                text.startsWith('1.') || text.startsWith('2.') || text.startsWith('3.') ||
-                text.startsWith('I.') || text.startsWith('II.')
-              );
-              return new docx.Paragraph({
-                spacing: { before: isHeader ? 220 : 120, after: 120, line: 240 },
-                children: [
-                  new docx.TextRun({
-                    text: text,
-                    font: "Arial",
-                    size: isHeader ? 28 : 22,
-                    bold: isHeader,
-                    color: isHeader ? "111827" : "374151"
-                  })
-                ]
-              });
-            })
+            children: docxParagraphs
           }
         ]
       });
@@ -316,30 +349,43 @@ export default function ConverterTools() {
     try {
       const arrayBuffer = await targetFile.arrayBuffer();
 
-      // Create a temporary host element positioned offscreen
+      // Create a temporary wrapper with height 0 and overflow hidden to avoid display, keeping children at 100% opacity and normal flow coordinates
+      const wrapper = document.createElement('div');
+      wrapper.id = 'temp-docx-pdf-wrapper';
+      wrapper.style.height = '0';
+      wrapper.style.overflow = 'hidden';
+      wrapper.style.position = 'relative';
+      document.body.appendChild(wrapper);
+
       const tempContainer = document.createElement('div');
       tempContainer.id = 'temp-docx-pdf-container';
-      tempContainer.style.position = 'fixed';
-      tempContainer.style.left = '-9999px';
-      tempContainer.style.top = '0';
       tempContainer.style.width = '800px';
       tempContainer.style.background = '#ffffff';
       tempContainer.style.color = '#000000';
       tempContainer.style.padding = '45px';
       tempContainer.style.fontFamily = 'Arial, sans-serif';
-      document.body.appendChild(tempContainer);
+      wrapper.appendChild(tempContainer);
 
       setProgressMsg("Formatting vector graphics and font structures (docx-preview)...");
       await renderAsync(arrayBuffer, tempContainer);
+
+      // Sequential DOM rendering paint guarantee using a promise wrapper with requestAnimationFrame
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setTimeout(resolve, 500); // Wait 500ms to be fully painted and ready in DOM
+          });
+        });
+      });
 
       setProgressMsg("Compiling high-contrast document pages (html2pdf)...");
       const strippedName = targetFile.name.substring(0, targetFile.name.lastIndexOf('.')) || targetFile.name;
       
       const opt = {
-        margin:       0.5,
+        margin:       0,
         filename:     `${strippedName}_converted.pdf`,
         image:        { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, logging: false },
+        html2canvas:  { scale: 2, useCORS: true, logging: false, scrollY: 0, scrollX: 0 },
         jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' as const },
         pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
       };
@@ -347,7 +393,7 @@ export default function ConverterTools() {
       await html2pdf().from(tempContainer).set(opt).save();
 
       // Cleanup DOM structure
-      document.body.removeChild(tempContainer);
+      document.body.removeChild(wrapper);
 
       setSuccess(true);
       setIsProcessing(false);
@@ -355,9 +401,9 @@ export default function ConverterTools() {
       console.error(err);
       setError(err?.message || "Failed client-side Word-to-PDF compiler.");
       setIsProcessing(false);
-      const oldElement = document.getElementById('temp-docx-pdf-container');
-      if (oldElement && oldElement.parentNode) {
-        oldElement.parentNode.removeChild(oldElement);
+      const oldWrapper = document.getElementById('temp-docx-pdf-wrapper');
+      if (oldWrapper && oldWrapper.parentNode) {
+        oldWrapper.parentNode.removeChild(oldWrapper);
       }
     }
   };
@@ -457,6 +503,23 @@ export default function ConverterTools() {
 
       setProgressMsg("Injecting matrices into OpenXML worksheets (SheetJS)...");
       const worksheet = XLSX.utils.aoa_to_sheet(rows2D);
+
+      // Loop through matrix items to calculate max column character widths
+      const colWidths: number[] = [];
+      for (let r = 0; r < rows2D.length; r++) {
+        const row = rows2D[r];
+        for (let c = 0; c < row.length; c++) {
+          const val = row[c] || '';
+          const valLen = val.toString().length;
+          if (colWidths[c] === undefined || valLen > colWidths[c]) {
+            colWidths[c] = valLen;
+          }
+        }
+      }
+      
+      // Inject column dimension constraints ('!cols') into SheetJS
+      worksheet['!cols'] = colWidths.map(w => ({ wch: Math.max(w || 10, 10) }));
+
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Extracted PDF Table');
 
@@ -504,21 +567,33 @@ export default function ConverterTools() {
       }
 
       setProgressMsg("Formatting vector grid rows using jsPDF autotable...");
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+
+      // Inspect column size counts
+      const maxCols = Math.max(...jsonData.map(row => row.length));
+      
+      // Switch the jsPDF instance dynamically to landscape if columns exceed 5
+      const orientation = maxCols > 5 ? 'landscape' : 'portrait';
+      const doc = new jsPDF({ 
+        orientation: orientation, 
+        unit: 'pt', 
+        format: 'letter' 
+      });
 
       // First row as headers
       const headers = jsonData[0].map(val => String(val ?? ''));
       const dataRows = jsonData.slice(1).map(row => row.map(val => String(val ?? '')));
 
+      // Wrap table data inside jspdf-autotable configurations to avoid page clipping
       autoTable(doc, {
         head: [headers],
         body: dataRows,
         theme: 'grid',
         styles: {
-          fontSize: 8,
-          cellPadding: 5,
+          fontSize: maxCols > 8 ? 6 : 8, // dynamically adjust font size if there are many columns
+          cellPadding: 4,
           lineColor: [220, 220, 220],
           lineWidth: 0.5,
+          overflow: 'linebreak', // Ensure text wraps to avoid clipping
         },
         headStyles: {
           fillColor: [234, 88, 12], // PDFly orange brand background color
@@ -527,7 +602,8 @@ export default function ConverterTools() {
         },
         alternateRowStyles: {
           fillColor: [250, 250, 250],
-        }
+        },
+        margin: { top: 40, bottom: 40, left: 30, right: 30 }
       });
 
       const strippedName = targetFile.name.substring(0, targetFile.name.lastIndexOf('.')) || targetFile.name;
@@ -553,77 +629,57 @@ export default function ConverterTools() {
         throw new Error("PDF.js library is not loaded. Please wait.");
       }
 
+      // Dynamically load pptxgenjs CDN script if not present on window
+      if (!(window as any).PptxGenJS) {
+        setProgressMsg("Loading pptxgenjs library from CDN...");
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
+          document.body.appendChild(script);
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error("Failed to load pptxgenjs library from CDN."));
+        });
+      }
+
       const buffer = await targetFile.arrayBuffer();
       const loadingTask = window.pdfjsLib.getDocument({ data: buffer });
       const pdf = await loadingTask.promise;
       const totalPages = pdf.numPages;
 
-      const slideTexts: string[] = [];
-      setProgressMsg(`Parsing text content across ${totalPages} pages...`);
+      const pptx = new (window as any).PptxGenJS();
+      pptx.layout = 'LAYOUT_16x9';
+
+      setProgressMsg(`Rendering ${totalPages} page(s) to presentation slide backgrounds...`);
 
       for (let i = 1; i <= totalPages; i++) {
-        setProgressMsg(`Unlocking text layout for Page ${i}/${totalPages}...`);
+        setProgressMsg(`Rasterizing PDF Page ${i}/${totalPages}...`);
         const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageWords = textContent.items.map((item: any) => item.str).join(' ');
-        slideTexts.push(cleanAndNormalizeUnicode(pageWords));
+        
+        // Render PDF page to HTML5 canvas
+        const viewport = page.getViewport({ scale: 2.0 });
+        const canvas = document.createElement('canvas');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        const context = canvas.getContext('2d');
+        
+        if (context) {
+          await page.render({
+            canvasContext: context,
+            viewport: viewport
+          }).promise;
+          
+          // Export canvas as image
+          const imgData = canvas.toDataURL('image/jpeg', 0.9);
+          
+          // Slide-by-slide append them as full-screen background assets
+          const slide = pptx.addSlide();
+          slide.background = { data: imgData };
+        }
       }
 
-      setProgressMsg("Encoding PowerPoint presentation slides (.ppt)...");
-
-      let pptHtml = `
-        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:p='urn:schemas-microsoft-com:office:powerpoint' xmlns='http://www.w3.org/TR/REC-html40'>
-        <head>
-          <meta charset="utf-8">
-          <title>PDFly Slide Deck Presentation</title>
-          <style>
-            body { font-family: 'Arial', sans-serif; background: #fafaf9; margin: 0; padding: 20px; }
-            .slide { 
-              background: #ffffff; width: 720px; height: 540px; margin: 40px auto; 
-              border: 1px solid #e7e5e4; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-              padding: 40px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;
-              position: relative; overflow: hidden;
-            }
-            .accent { position: absolute; top: 0; left: 0; right: 0; height: 6px; background: #f97316; }
-            h2 { color: #ea580c; font-size: 24px; border-bottom: 1px solid #f3f4f6; padding-bottom: 12px; margin-top: 0; }
-            .content-slide { font-size: 14px; line-height: 1.6; color: #44403c; text-align: justify; flex-grow: 1; margin-top: 20px; }
-            .footer-slide { font-size: 10px; color: #a8a29e; border-top: 1px solid #f3f4f6; padding-top: 12px; display: flex; justify-content: space-between; }
-          </style>
-        </head>
-        <body>
-      `;
-
-      slideTexts.forEach((slideTxt, idx) => {
-        const cleanTxt = slideTxt.trim().substring(0, 800) || "[No slide content found on this page]";
-        pptHtml += `
-          <div class="slide">
-            <div class="accent"></div>
-            <div>
-              <h2>PDFly Presentation - Slide ${idx + 1}</h2>
-              <div class="content-slide">${cleanTxt}</div>
-            </div>
-            <div class="footer-slide">
-              <span>PDFly Secure Local Sandbox Presentation</span>
-              <span>Slide ${idx + 1} of ${slideTexts.length}</span>
-            </div>
-          </div>
-        `;
-      });
-
-      pptHtml += `</body></html>`;
-
-      const blob = new Blob([pptHtml], { type: 'application/vnd.ms-powerpoint;charset=utf-8' });
-      const downloadUrl = URL.createObjectURL(blob);
-      const tempLink = document.createElement("a");
-      tempLink.href = downloadUrl;
-
+      setProgressMsg("Saving PowerPoint presentation...");
       const strippedName = targetFile.name.substring(0, targetFile.name.lastIndexOf('.')) || targetFile.name;
-      tempLink.download = `${strippedName}_deck.ppt`;
-
-      document.body.appendChild(tempLink);
-      tempLink.click();
-      document.body.removeChild(tempLink);
-      URL.revokeObjectURL(downloadUrl);
+      await pptx.writeFile({ fileName: `${strippedName}_presentation.pptx` });
 
       setSuccess(true);
       setIsProcessing(false);
@@ -638,30 +694,66 @@ export default function ConverterTools() {
     setIsProcessing(true);
     setError(null);
     setSuccess(false);
-    setProgressMsg("Interpreting presentation document slides locally...");
+    setProgressMsg("Unzipping PowerPoint archive structure...");
 
     try {
-      const textFromPpt = await targetFile.text();
-      // Extract printable lines
-      let cleanSnippet = textFromPpt.replace(/[^\x20-\x7E\n]/g, ' ');
-      let slidesArray = cleanSnippet.split(/\s{15,}/g).filter(s => s.trim().length > 10);
-      let safeSlides = slidesArray.length > 0 ? slidesArray.slice(0, 6) : [
-        "Corporate Presentation Slide\n\nKey Strategy Deliverables\nMarket Opportunity Indicators\nLocal Sandbox Safe Sandbox Security Operations Framework",
-        "Executive Strategy Outline\n\nQ1 performance reviews\nGlobal scaling procedures\nCloud execution sandboxes",
-        "Confidential Project Scope\n\n100% private locally encapsulated framework\nClient file safety priority zero external access",
-        "System Integrity Architecture\n\nVerified zero server upload directives\nHigh-density visual renders and compilation assets"
-      ];
+      // Dynamically load JSZip if not present on window
+      if (!(window as any).JSZip) {
+        setProgressMsg("Loading JSZip library from CDN...");
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+          document.body.appendChild(script);
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error("Failed to load JSZip library from CDN."));
+        });
+      }
 
-      setProgressMsg("Formatting vector graphics using pdf-lib on a landscape canvas...");
+      const arrayBuffer = await targetFile.arrayBuffer();
+      const zip = await (window as any).JSZip.loadAsync(arrayBuffer);
+      const parser = new DOMParser();
+
+      // Find all slide XML files
+      const slideFiles = Object.keys(zip.files).filter(name => 
+        name.startsWith("ppt/slides/slide") && name.endsWith(".xml")
+      );
+
+      if (slideFiles.length === 0) {
+        throw new Error("No slide layout structure found inside the uploaded PowerPoint presentation.");
+      }
+
+      // Sort slide files numerically
+      slideFiles.sort((a, b) => {
+        const numA = parseInt(a.replace(/[^\d]/g, ''), 10);
+        const numB = parseInt(b.replace(/[^\d]/g, ''), 10);
+        return numA - numB;
+      });
+
+      const slidesTextList: string[] = [];
+      setProgressMsg(`Parsing presentation slide structures...`);
+
+      for (const name of slideFiles) {
+        const xmlString = await zip.files[name].async('string');
+        const xmlDoc = parser.parseFromString(xmlString, 'application/xml');
+        const textNodes = xmlDoc.getElementsByTagName('a:t');
+        
+        let slideText = '';
+        for (let j = 0; j < textNodes.length; j++) {
+          slideText += (textNodes[j].textContent || '') + ' ';
+        }
+        slidesTextList.push(slideText.trim());
+      }
+
+      setProgressMsg("Formatting vector presentation pages using pdf-lib on a landscape canvas...");
       const pdfDoc = await PDFDocument.create();
-      const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
       const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-      for (let i = 0; i < Math.min(safeSlides.length, 10); i++) {
-        const page = pdfDoc.addPage([792, 612]); // Landscape format
+      for (let i = 0; i < slidesTextList.length; i++) {
+        const page = pdfDoc.addPage([792, 612]); // Landscape Letter format
         const { width, height } = page.getSize();
 
-        // Border card
+        // Premium layout cards: Border card
         page.drawRectangle({
           x: 30,
           y: 30,
@@ -671,7 +763,7 @@ export default function ConverterTools() {
           borderWidth: 1.5,
         });
 
-        // Top thin accent bar
+        // Top thin accent bar (PDFly brand orange)
         page.drawRectangle({
           x: 30,
           y: height - 36,
@@ -680,12 +772,12 @@ export default function ConverterTools() {
           color: rgb(0.917, 0.345, 0.043),
         });
 
-        // Heading title
+        // Slide title
         page.drawText(`PRESENTATION DECK: SLIDE ${i + 1}`, {
           x: 60,
           y: height - 80,
           size: 18,
-          font,
+          font: fontBold,
           color: rgb(0.917, 0.345, 0.043),
         });
 
@@ -698,18 +790,20 @@ export default function ConverterTools() {
           color: rgb(0.917, 0.345, 0.043),
         });
 
-        // Split text body and format
-        const slideText = safeSlides[i].replace(/\s+/g, ' ').trim();
-        const words = slideText.split(' ');
+        const slideText = slidesTextList[i] || "[No text found on this slide]";
+        const cleanedText = cleanAndNormalizeUnicode(slideText);
+        
+        // Split text body into lines and format/wrap manually
+        const words = cleanedText.split(' ');
         let currentLine = '';
         let lineY = height - 140;
 
         for (let j = 0; j < words.length; j++) {
           const testLine = currentLine ? currentLine + ' ' + words[j] : words[j];
-          const textW = fontRegular.widthOfTextAtSize(testLine, 11);
+          const textW = fontRegular.widthOfTextAtSize(testLine, 12);
           if (textW > width - 120) {
-            page.drawText(currentLine, { x: 60, y: lineY, size: 11, font: fontRegular, color: rgb(0.2, 0.2, 0.2) });
-            lineY -= 18;
+            page.drawText(currentLine, { x: 60, y: lineY, size: 12, font: fontRegular, color: rgb(0.2, 0.2, 0.2) });
+            lineY -= 20;
             currentLine = words[j];
             if (lineY < 85) break;
           } else {
@@ -717,11 +811,11 @@ export default function ConverterTools() {
           }
         }
         if (currentLine && lineY >= 85) {
-          page.drawText(currentLine, { x: 60, y: lineY, size: 11, font: fontRegular, color: rgb(0.2, 0.2, 0.2) });
+          page.drawText(currentLine, { x: 60, y: lineY, size: 12, font: fontRegular, color: rgb(0.2, 0.2, 0.2) });
         }
 
-        // Footer lines
-        page.drawText(`Slide ${i + 1} of ${safeSlides.length}`, {
+        // Footer slide number
+        page.drawText(`Slide ${i + 1} of ${slidesTextList.length}`, {
           x: width - 120,
           y: 50,
           size: 9,
@@ -729,6 +823,7 @@ export default function ConverterTools() {
           color: rgb(0.5, 0.5, 0.5),
         });
 
+        // Footer brand
         page.drawText(`🔒 Secure Local Sandbox Conversion`, {
           x: 60,
           y: 50,
@@ -738,16 +833,16 @@ export default function ConverterTools() {
         });
       }
 
-      setProgressMsg("Encoding and downloading pdf slides locally...");
+      setProgressMsg("Downloading PDF presentation...");
       const pdfBytes = await pdfDoc.save();
 
-      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const blob = new Blob([pdfBytes as any], { type: 'application/pdf' });
       const downloadUrl = URL.createObjectURL(blob);
       const tempLink = document.createElement("a");
       tempLink.href = downloadUrl;
 
       const strippedName = targetFile.name.substring(0, targetFile.name.lastIndexOf('.')) || targetFile.name;
-      tempLink.download = `${strippedName}_slides.pdf`;
+      tempLink.download = `${strippedName}_presentation.pdf`;
 
       document.body.appendChild(tempLink);
       tempLink.click();
@@ -758,7 +853,94 @@ export default function ConverterTools() {
       setIsProcessing(false);
     } catch (err: any) {
       console.error(err);
-      setError(err?.message || "Failed client-side PPT-to-PDF converter.");
+      setError(err?.message || "Failed client-side PowerPoint-to-PDF converter.");
+      setIsProcessing(false);
+    }
+  };
+
+  const runTxtToPdfClient = async (targetFile: File) => {
+    setIsProcessing(true);
+    setError(null);
+    setSuccess(false);
+    setProgressMsg("Reading plain text file...");
+
+    try {
+      const text = await targetFile.text();
+      const cleanText = cleanAndNormalizeUnicode(text);
+
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'pt',
+        format: 'letter'
+      });
+
+      const margin = 54; // standard 0.75-inch margin (54pt)
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const containerWidth = pageWidth - (margin * 2);
+      
+      const fontSize = 11;
+      doc.setFont('Helvetica');
+      doc.setFontSize(fontSize);
+      
+      // Calculate dynamic line heights for plaintext files
+      const lineHeight = fontSize * 1.4;
+
+      // Use jsPDF's splitTextToSize utility to handle line wrapping against container widths
+      const wrappedLines: string[] = doc.splitTextToSize(cleanText, containerWidth);
+
+      // Maintain an active Y-coordinate index tracker
+      let currentY = margin + fontSize; // Start below the top margin
+      const bottomThreshold = pageHeight - margin;
+
+      // Running Header & Footer Renderer
+      const drawHeaderFooter = (pageNum: number) => {
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        // Header
+        doc.text(`Document: ${targetFile.name}`, margin, margin - 15);
+        doc.line(margin, margin - 8, pageWidth - margin, margin - 8);
+        
+        // Footer
+        doc.text(`Page ${pageNum}`, pageWidth / 2, pageHeight - margin + 20, { align: 'center' });
+        doc.text(`🔒 Private Client Sandbox`, margin, pageHeight - margin + 20);
+        
+        // Reset styles for regular text
+        doc.setFontSize(fontSize);
+        doc.setTextColor(40, 40, 40);
+      };
+
+      // Draw header and footer on first page
+      let pageNumber = 1;
+      drawHeaderFooter(pageNumber);
+
+      for (let i = 0; i < wrappedLines.length; i++) {
+        const line = wrappedLines[i];
+        
+        // If the height pointer drops below the bottom margin threshold
+        if (currentY + lineHeight > bottomThreshold) {
+          // inject a local page break
+          doc.addPage();
+          pageNumber++;
+          // reset the coordinate pointer back to the top-margin header line
+          currentY = margin + fontSize;
+          // draw header & footer on new page
+          drawHeaderFooter(pageNumber);
+        }
+
+        // Draw line text
+        doc.text(line, margin, currentY);
+        currentY += lineHeight;
+      }
+
+      const strippedName = targetFile.name.substring(0, targetFile.name.lastIndexOf('.')) || targetFile.name;
+      doc.save(`${strippedName}_converted.pdf`);
+
+      setSuccess(true);
+      setIsProcessing(false);
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || "Failed client-side TXT-to-PDF compiler.");
       setIsProcessing(false);
     }
   };
@@ -794,6 +976,10 @@ export default function ConverterTools() {
       await runPptToPdfClient(targetFile);
       return;
     }
+    if (direction === 'txtToPdf') {
+      await runTxtToPdfClient(targetFile);
+      return;
+    }
   };
 
   // ==========================================
@@ -810,13 +996,27 @@ export default function ConverterTools() {
     setProgressMsg('Unlocking local PDF document index tree...');
 
     try {
+      // Dynamically load JSZip if not present on window
+      if (!(window as any).JSZip) {
+        setProgressMsg("Loading JSZip library from CDN...");
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+          document.body.appendChild(script);
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error("Failed to load JSZip library from CDN."));
+        });
+      }
+
       const buffer = await pdfToImgFile.arrayBuffer();
       const loadingTask = window.pdfjsLib.getDocument({ data: buffer });
       const pdf = await loadingTask.promise;
       const count = pdf.numPages;
       setProgressMsg(`Rendering sequence: ${count} pages onto canvas layers...`);
 
+      const zip = new (window as any).JSZip();
       const outputs: string[] = [];
+
       for (let i = 1; i <= count; i++) {
         setProgressMsg(`Pasting raster cells for page ${i}/${count}...`);
         const page = await pdf.getPage(i);
@@ -831,9 +1031,30 @@ export default function ConverterTools() {
             canvasContext: context,
             viewport: viewport
           }).promise;
+          
+          // Get JPEG Blob from Canvas
+          const blob = await new Promise<Blob | null>((resolve) => {
+            canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.9);
+          });
+          
+          if (blob) {
+            zip.file(`page_${i}.jpg`, blob);
+          }
           outputs.push(canvas.toDataURL('image/jpeg', 0.9));
         }
       }
+
+      setProgressMsg('Generating compressed ZIP archive (JSZip)...');
+      const zipContent = await zip.generateAsync({ type: 'blob' });
+      
+      const downloadUrl = URL.createObjectURL(zipContent);
+      const tempLink = document.createElement("a");
+      tempLink.href = downloadUrl;
+      tempLink.download = `converted-images.zip`;
+      document.body.appendChild(tempLink);
+      tempLink.click();
+      document.body.removeChild(tempLink);
+      URL.revokeObjectURL(downloadUrl);
 
       setRenderedImages(outputs);
       setSuccess(true);
@@ -915,7 +1136,7 @@ export default function ConverterTools() {
       setProgressMsg('Aligning streams and packing files...');
       const bytes = await pdfDoc.save({ useObjectStreams: true });
       
-      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const blob = new Blob([bytes as any], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -1038,7 +1259,7 @@ export default function ConverterTools() {
       setProgressMsg('Writing final compiled array structures...');
       const bytes = await pdfDoc.save();
 
-      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const blob = new Blob([bytes as any], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -1075,6 +1296,9 @@ export default function ConverterTools() {
     if (direction === 'pptToPdf') {
       return '.pptx,.ppt';
     }
+    if (direction === 'txtToPdf') {
+      return '.txt';
+    }
     return '*';
   };
 
@@ -1086,6 +1310,7 @@ export default function ConverterTools() {
       case 'excelToPdf': return 'Spreadsheet Excel to PDF Grid';
       case 'pdfToPpt': return 'PDF to Slide Deck Outline';
       case 'pptToPdf': return 'Corporate Presentation to PDF';
+      case 'txtToPdf': return 'Plain Text to PDF Compiler';
       default: return 'Document pipeline conversion';
     }
   };
@@ -1098,6 +1323,7 @@ export default function ConverterTools() {
       case 'excelToPdf': return 'Compile sheet tables or raw CSV lists with bordered grids directly onto landscape vector PDFs.';
       case 'pdfToPpt': return 'Translate chapters and core outlines from multi-page PDFs into PowerPoint slides (.ppt) in offline memory.';
       case 'pptToPdf': return 'Load presentation files (.pptx, .ppt) to draw slides sequentially onto landscape vector PDFs.';
+      case 'txtToPdf': return 'Convert plain text files (.txt) into structured, multi-page vector PDFs with dynamic line wrapping, page breaks, margins, and headers.';
       default: return 'Private isolated offline compiler engine';
     }
   };
@@ -1110,6 +1336,7 @@ export default function ConverterTools() {
       case 'excelToPdf': return <Sliders className="h-10 w-10 text-orange-600" />;
       case 'pdfToPpt': return <Presentation className="h-10 w-10 text-orange-600" />;
       case 'pptToPdf': return <Sparkles className="h-10 w-10 text-orange-600" />;
+      case 'txtToPdf': return <FileText className="h-10 w-10 text-orange-600" />;
       default: return <FileUp className="h-10 w-10 text-orange-600" />;
     }
   };
@@ -1426,7 +1653,8 @@ export default function ConverterTools() {
           {/* DYNAMIC NEW BI-DIRECTIONAL FULL-STACK PIPELINES (Requirement 1) */}
           {(direction === 'pdfToWord' || direction === 'wordToPdf' || 
             direction === 'pdfToExcel' || direction === 'excelToPdf' ||
-            direction === 'pdfToPpt' || direction === 'pptToPdf') && (
+            direction === 'pdfToPpt' || direction === 'pptToPdf' ||
+            direction === 'txtToPdf') && (
             
             <div className="flex flex-col gap-4 animate-fade-in">
               <div>
@@ -1578,6 +1806,7 @@ export default function ConverterTools() {
               {(direction === 'pdfToWord' || direction === 'wordToPdf' || 
                 direction === 'pdfToExcel' || direction === 'excelToPdf' ||
                 direction === 'pdfToPpt' || direction === 'pptToPdf' ||
+                direction === 'txtToPdf' ||
                 direction === 'imgToPdf' || direction === 'htmlToPdf') && (
                 <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-[11px] text-emerald-800 leading-relaxed font-bold">
                   The compiled output document file has been constructed securely inside the sandbox and transferred automatically onto your computer's system download files list.
