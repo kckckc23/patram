@@ -45,6 +45,17 @@ const I = {
   shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>',
   alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L2 18a1.7 1.7 0 0 0 1.5 2.6h17A1.7 1.7 0 0 0 22 18L13.7 3.9a1.7 1.7 0 0 0-3 0z"/></svg>',
   empty: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>',
+  layers: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>',
+  min: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9L4 4M9 9V5M9 9H5M15 15l5 5M15 15v4M15 15h4"/></svg>',
+  doc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v5h5"/><path d="M6 2h9l5 5v13H6z"/><path d="M9 13h6M9 17h4"/></svg>',
+  swap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>',
+};
+const CATICON = {
+  "Assemble": I.layers,
+  "Optimize": I.min,
+  "Extract": I.doc,
+  "Convert to PDF": I.swap,
+  "Convert from PDF": I.swap,
 };
 const MIME = {
   pdf: "application/pdf",
@@ -175,29 +186,74 @@ const TOOLS = [
     engine: "convert", action: "pdfToPpt", accept: ".pdf", out: "pptx", suffix: "" },
 ];
 
-/* ---- rail --------------------------------------------------------------- */
-const rail = $("#rail"), stage = $("#stage");
-let activeId = null, codeN = 0;
-function buildRail() {
+/* ---- index (tool discovery) + workbench --------------------------------- */
+const stage = $("#stage");
+const gridEl = $("#grid"), pillsEl = $("#pills"), searchEl = $("#toolSearch"),
+      emptyEl = $("#empty"), indexEl = $("#index"), workbenchEl = $("#workbench"),
+      backEl = $("#back");
+let activeId = null, activeCat = "All";
+
+/* derive ordered categories + a numbered, flat list of tools */
+const CATS = [];
+const TOOLLIST = [];
+(function deriveTools() {
+  let cat = null, n = 0;
   TOOLS.forEach((t) => {
-    if (t.group) { rail.appendChild(el("div", { class: "group eyebrow" }, t.group)); return; }
-    codeN++;
-    const code = String(codeN).padStart(2, "0");
-    const btn = el("button", { class: "tool-btn", "data-id": t.id, type: "button",
-      onclick: () => selectTool(t.id) },
-      `<span class="code">${code}</span><span>${t.name}</span>`);
-    t._code = code;
-    rail.appendChild(btn);
+    if (t.group) { cat = t.group; CATS.push(cat); return; }
+    n++; t._code = String(n).padStart(2, "0"); t._cat = cat;
+    TOOLLIST.push(t);
   });
+})();
+
+function buildIndex() {
+  ["All", ...CATS].forEach((c, i) => {
+    const b = el("button", { class: "pill", type: "button", role: "tab",
+      "data-cat": c, "aria-current": i === 0 ? "true" : "false",
+      onclick: () => {
+        activeCat = c;
+        pillsEl.querySelectorAll(".pill").forEach((x) => x.setAttribute("aria-current", x === b ? "true" : "false"));
+        applyFilter();
+      } }, c);
+    pillsEl.appendChild(b);
+  });
+  TOOLLIST.forEach((t) => {
+    const card = el("button", { class: "tool-card", type: "button", "data-id": t.id,
+      "data-cat": t._cat, "data-search": (t.name + " " + t._cat + " " + t.desc).toLowerCase(),
+      onclick: () => selectTool(t.id) },
+      `<span class="fol">${t._code}</span>
+       <span class="ico">${CATICON[t._cat] || I.doc}</span>
+       <span class="nm">${t.name}</span>
+       <span class="ds">${t.desc}</span>`);
+    gridEl.appendChild(card);
+  });
+  searchEl.addEventListener("input", applyFilter);
+  backEl.addEventListener("click", backToIndex);
+}
+function applyFilter() {
+  const q = searchEl.value.trim().toLowerCase();
+  let vis = 0;
+  gridEl.querySelectorAll(".tool-card").forEach((c) => {
+    const on = (activeCat === "All" || c.dataset.cat === activeCat) && c.dataset.search.includes(q);
+    c.style.display = on ? "" : "none";
+    if (on) vis++;
+  });
+  emptyEl.hidden = vis > 0;
 }
 function selectTool(id) {
+  const tool = TOOLLIST.find((t) => t.id === id);
+  if (!tool) return;
   activeId = id;
-  rail.querySelectorAll(".tool-btn").forEach((b) =>
-    b.setAttribute("aria-current", b.dataset.id === id ? "true" : "false"));
-  const tool = TOOLS.find((t) => t.id === id);
   stage.innerHTML = "";
   stage.appendChild(renderToolHead(tool));
   ENGINES[tool.engine](tool, stage);
+  indexEl.hidden = true;
+  workbenchEl.hidden = false;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+function backToIndex() {
+  workbenchEl.hidden = true;
+  indexEl.hidden = false;
+  activeId = null;
 }
 
 /* ---- shared UI bits ------------------------------------------------------ */
@@ -843,30 +899,23 @@ function sealSVG() {
     <circle cx="100" cy="100" r="6" fill="#e79310"/>
   </svg>`;
 }
-function renderWelcome() {
-  stage.innerHTML = "";
-  const hero = el("div", { class: "hero" });
-  const w = el("div", { class: "welcome" }, `
-    <span class="eyebrow">Private document studio</span>
-    <h1>Work your PDFs. Nothing ever <span class="u">leaves this device</span>.</h1>
-    <p class="lede">Merge, split, compress, OCR and convert — powered by Python compiled to
-      WebAssembly and running right here in your browser. No account, no upload, no server.</p>
-    <p class="origin"><b>Patram</b> — पत्रम्, Sanskrit for “leaf, page” — the palm leaf that Indian
-      scribes wrote on for centuries. Yours stay just as private.</p>`);
-  const box = el("div", { class: "boot-readout", id: "bootReadout" });
-  w.appendChild(box);
-  const pledges = el("div", { class: "pledges" });
+function renderHero() {
+  $("#seal").innerHTML = sealSVG();
+  const pledges = $("#pledges");
   ["No file upload", "Runs offline once loaded", "Open the network tab — it stays quiet"].forEach((t) =>
     pledges.appendChild(el("span", { class: "pledge" }, `${I.shield}${t}`)));
-  w.appendChild(pledges);
-  const hint = el("p", { style: "margin-top:22px;color:var(--ink-3);font-size:13px" }, "Pick a tool to begin.");
-  w.appendChild(hint);
-  const seal = el("div", { class: "seal" }, sealSVG());
-  hero.append(w, seal);
-  stage.appendChild(hero);
-  renderBoot(box);
+  renderBoot($("#bootReadout"));
 }
 
 /* ---- boot --------------------------------------------------------------- */
-buildRail();
-renderWelcome();
+buildIndex();
+renderHero();
+
+/* ⌘K / Ctrl-K jumps to the tool search (returning from the workbench first) */
+document.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    if (!workbenchEl.hidden) backToIndex();
+    searchEl.focus();
+  }
+});

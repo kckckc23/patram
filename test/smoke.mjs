@@ -23,7 +23,7 @@ ok("engine reached READY state in the browser");
 
 // --- Compress ---
 console.log("\x1b[1mCompress tool…\x1b[0m");
-await page.click('.tool-btn[data-id="compress"]');
+await page.click('.tool-card[data-id="compress"]');
 await page.waitForSelector("#stage .drop");
 const c1 = await page.$('#stage input[type="file"]');
 await c1.uploadFile(SAMPLE);
@@ -35,7 +35,9 @@ ok("compress produced a download — " + compressStat.slice(0, 80));
 
 // --- PDF -> Text ---
 console.log("\x1b[1mPDF → Text tool…\x1b[0m");
-await page.click('.tool-btn[data-id="pdfText"]');
+await page.click("#back");                       // return to the index before picking another tool
+await page.waitForSelector('.tool-card[data-id="pdfText"]', { visible: true });
+await page.click('.tool-card[data-id="pdfText"]');
 await page.waitForSelector("#stage .drop");
 const c2 = await page.$('#stage input[type="file"]');
 await c2.uploadFile(SAMPLE);
