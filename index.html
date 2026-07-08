@@ -3,26 +3,27 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PDF Tools — runs on your machine, not a server</title>
-  <meta name="description" content="A private PDF toolkit. Merge, split, compress, OCR and convert PDFs — all processed by Python running in your browser. Your files never leave your device." />
+  <title>Patram — a private PDF studio that runs on your device</title>
+  <meta name="description" content="Patram (पत्रम्) is a private PDF toolkit. Merge, split, compress, OCR and convert PDFs — all processed by Python running in your browser. Your files never leave your device." />
+  <meta name="theme-color" content="#c0261d" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Rozha+One&family=Mukta:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
   <div class="app">
     <header class="topbar">
       <div class="wordmark">
-        <span class="glyph">P</span>
+        <span class="glyph" aria-hidden="true">प</span>
         <span>
-          <b>pdftools<span class="tld">.local</span></b>
-          <small>on-device runtime</small>
+          <b>Patram<span class="tld"> पत्रम्</span></b>
+          <small>on-device document studio</small>
         </span>
       </div>
 
-      <!-- signature: live engine readout -->
+      <!-- signature: live engine readout, styled as a scribe's seal -->
       <div class="runtime" id="runtime" data-state="booting" role="status" aria-live="polite" title="The Python engine runs on your machine">
         <span class="led" aria-hidden="true"></span>
         <span class="rt-label">runtime</span>
@@ -37,7 +38,7 @@
 
     <footer class="foot">
       <span>NO UPLOAD · PROCESSED IN-BROWSER VIA PYODIDE (PYTHON/WASM)</span>
-      <span>WORKS OFFLINE ONCE LOADED</span>
+      <span>पत्रम् · WORKS OFFLINE ONCE LOADED</span>
     </footer>
   </div>
 

@@ -818,22 +818,52 @@ function renderBoot(box) {
   ).join("") + (engineReady ? "" : `<span class="l"><span class="caret">▍</span></span>`);
   box.scrollTop = box.scrollHeight;
 }
+/* the mandala seal — hand-built lotus, the page's signature ornament */
+function sealSVG() {
+  const petals = [];
+  for (let i = 0; i < 8; i++)
+    petals.push(`<path d="M100 100 C116 60 116 38 100 20 C84 38 84 60 100 100 Z" transform="rotate(${i * 45} 100 100)"/>`);
+  const inner = [];
+  for (let i = 0; i < 8; i++)
+    inner.push(`<path d="M100 100 C110 74 110 58 100 46 C90 58 90 74 100 100 Z" transform="rotate(${i * 45 + 22.5} 100 100)"/>`);
+  const dots = [];
+  for (let i = 0; i < 16; i++) {
+    const a = (i * 22.5 * Math.PI) / 180;
+    dots.push(`<circle cx="${(100 + 92 * Math.cos(a)).toFixed(1)}" cy="${(100 + 92 * Math.sin(a)).toFixed(1)}" r="2.4"/>`);
+  }
+  return `<svg viewBox="0 0 200 200" role="img" aria-label="Patram seal">
+    <circle cx="100" cy="100" r="97" fill="none" stroke="#b6862c" stroke-width="1.5"/>
+    <g class="rot">
+      <g fill="#e79310" opacity=".92">${petals.join("")}</g>
+      <g fill="#c0261d" opacity=".9">${inner.join("")}</g>
+      <g fill="#b6862c">${dots.join("")}</g>
+    </g>
+    <circle cx="100" cy="100" r="82" fill="none" stroke="#1d3a63" stroke-width="1.2" opacity=".55"/>
+    <circle cx="100" cy="100" r="17" fill="#c0261d" stroke="#b6862c" stroke-width="1.5"/>
+    <circle cx="100" cy="100" r="6" fill="#e79310"/>
+  </svg>`;
+}
 function renderWelcome() {
   stage.innerHTML = "";
+  const hero = el("div", { class: "hero" });
   const w = el("div", { class: "welcome" }, `
-    <span class="eyebrow">Private PDF toolkit</span>
-    <h1>Edit your PDFs. Your files never <span class="u">leave this device</span>.</h1>
+    <span class="eyebrow">Private document studio</span>
+    <h1>Work your PDFs. Nothing ever <span class="u">leaves this device</span>.</h1>
     <p class="lede">Merge, split, compress, OCR and convert — powered by Python compiled to
-      WebAssembly and running right here in your browser. No account, no upload, no server.</p>`);
+      WebAssembly and running right here in your browser. No account, no upload, no server.</p>
+    <p class="origin"><b>Patram</b> — पत्रम्, Sanskrit for “leaf, page” — the palm leaf that Indian
+      scribes wrote on for centuries. Yours stay just as private.</p>`);
   const box = el("div", { class: "boot-readout", id: "bootReadout" });
   w.appendChild(box);
   const pledges = el("div", { class: "pledges" });
   ["No file upload", "Runs offline once loaded", "Open the network tab — it stays quiet"].forEach((t) =>
     pledges.appendChild(el("span", { class: "pledge" }, `${I.shield}${t}`)));
   w.appendChild(pledges);
-  const hint = el("p", { style: "margin-top:22px;color:var(--ink-3);font-size:13px" }, "Pick a tool from the left to begin.");
+  const hint = el("p", { style: "margin-top:22px;color:var(--ink-3);font-size:13px" }, "Pick a tool to begin.");
   w.appendChild(hint);
-  stage.appendChild(w);
+  const seal = el("div", { class: "seal" }, sealSVG());
+  hero.append(w, seal);
+  stage.appendChild(hero);
   renderBoot(box);
 }
 
