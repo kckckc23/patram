@@ -207,6 +207,66 @@ button{font-family:inherit;cursor:pointer;}
 .l5-pill[aria-current="true"]{color:#fff;background:linear-gradient(135deg,var(--haldi),var(--sindoor));border-color:var(--gold);box-shadow:0 4px 12px rgba(192,38,29,.22);}
 .l5-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;}
 
+/* ============= LAYOUT 6 · STUDIO RAIL (sidebar nav + runtime hero) ======= */
+.l6-wrap{display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start;}
+.l6-rail{background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r-card);
+  padding:16px 14px;max-height:calc(100vh - 180px);overflow-y:auto;
+  box-shadow:var(--shadow),inset 0 0 0 4px var(--surface),inset 0 0 0 5px rgba(182,134,44,.24);}
+.l6-rail .grouplabel{margin:16px 6px 8px;}
+.l6-rail .grouplabel:first-child{margin-top:4px;}
+.l6-nav{display:flex;flex-direction:column;gap:2px;}
+.l6-item{display:flex;align-items:center;gap:14px;width:100%;text-align:left;
+  background:transparent;border:0;border-radius:var(--r-ctrl);padding:9px 12px;
+  font-family:inherit;color:var(--ink);transition:background .12s,color .12s;}
+.l6-item:hover{background:var(--haldi-wash);}
+.l6-item[aria-current="true"]{background:linear-gradient(135deg,var(--haldi),var(--sindoor));color:#fff;box-shadow:0 4px 12px rgba(192,38,29,.22);}
+.l6-item .no{font-family:var(--mono);font-size:11px;color:var(--ink-3);flex:none;}
+.l6-item:hover .no{color:var(--sindoor);}
+.l6-item[aria-current="true"] .no{color:rgba(255,255,255,.82);}
+.l6-item .nm{font-size:14px;font-weight:600;}
+
+.l6-main{position:relative;background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r-card);
+  padding:34px 38px;box-shadow:var(--shadow),inset 0 0 0 5px var(--surface),inset 0 0 0 6px rgba(182,134,44,.30);}
+.l6-seal{position:absolute;top:30px;right:34px;width:150px;max-width:32%;}
+.l6-main h1{font-size:clamp(28px,3.4vw,46px);line-height:1.07;max-width:15ch;margin:14px 0 0;}
+.l6-main h1 .u{color:var(--sindoor);position:relative;white-space:nowrap;}
+.l6-main h1 .u::after{content:"";position:absolute;left:0;right:0;bottom:-.06em;height:3px;background:linear-gradient(90deg,var(--haldi),var(--sindoor));border-radius:3px;}
+.l6-lede{color:var(--ink-2);font-size:16px;max-width:52ch;margin:20px 0 0;}
+.l6-quote{margin:22px 0 0;padding:10px 0 10px 18px;border-left:3px solid var(--sindoor);
+  font-size:14.5px;line-height:1.55;color:var(--ink-2);font-style:italic;max-width:62ch;}
+.l6-quote b{color:var(--sindoor);font-family:var(--display);font-style:normal;font-weight:400;}
+.l6-console{margin:24px 0 0;background:linear-gradient(180deg,var(--neel),var(--neel-ink));border:1px solid var(--neel-ink);
+  border-radius:var(--r-card);padding:18px 22px;font-family:var(--mono);font-size:12.5px;line-height:1.9;color:#c4d1e6;
+  box-shadow:0 8px 22px rgba(18,34,64,.28),inset 0 1px 0 rgba(255,255,255,.06);}
+.l6-console .ln{display:flex;gap:10px;}
+.l6-console .ln::before{content:"›";color:var(--haldi);flex:none;}
+.l6-console .ln.ok{color:#dfeccf;}
+.l6-console .ln.ok::before{content:"✓";color:#7fc46b;}
+.l6-pills{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0 0;}
+.l6-trust{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;
+  color:var(--mehendi);background:var(--mehendi-wash);border:1px solid #bcd190;border-radius:999px;padding:8px 14px;}
+.l6-trust svg{width:15px;height:15px;flex:none;}
+.l6-cta{margin:22px 0 0;color:var(--ink-3);font-size:14.5px;}
+@media(max-width:900px){.l6-wrap{grid-template-columns:1fr;}.l6-rail{max-height:none;}.l6-seal{width:110px;top:24px;right:24px;}.l6-main{padding:26px 22px;}}
+
+/* ====== LAYOUT 7 · STUDIO INDEX (hero sidebar + illuminated index) ====== */
+.l7-wrap{display:grid;grid-template-columns:308px 1fr;gap:24px;align-items:start;}
+.l7-hero{position:sticky;top:14px;background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r-card);
+  padding:26px 24px;box-shadow:var(--shadow),inset 0 0 0 4px var(--surface),inset 0 0 0 5px rgba(182,134,44,.24);}
+.l7-hero .seal{width:112px;margin-bottom:16px;}
+.l7-hero h1{font-size:clamp(26px,2.4vw,34px);line-height:1.1;margin:10px 0 0;}
+.l7-hero h1 .u{color:var(--sindoor);position:relative;white-space:nowrap;}
+.l7-hero h1 .u::after{content:"";position:absolute;left:0;right:0;bottom:-.06em;height:3px;background:linear-gradient(90deg,var(--haldi),var(--sindoor));border-radius:3px;}
+.l7-lede{color:var(--ink-2);font-size:14.5px;line-height:1.5;margin:14px 0 0;}
+.l7-trust{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin:20px 0 0;padding-top:18px;border-top:1px solid var(--line);}
+.l7-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:0 0 16px;}
+.l7-bar .l5-pills{margin:0;justify-content:flex-start;}
+.l7-bar .l5-search{width:min(300px,100%);flex:none;}
+@media(max-width:900px){.l7-wrap{grid-template-columns:1fr;}.l7-hero{position:static;display:grid;grid-template-columns:auto 1fr;column-gap:20px;align-items:center;}
+  .l7-hero .seal{grid-row:1/3;width:96px;margin:0;}.l7-hero .eyebrow,.l7-hero h1,.l7-hero .l7-lede{grid-column:2;}
+  .l7-hero .l7-trust{grid-column:1/3;flex-direction:row;flex-wrap:wrap;}}
+@media(max-width:560px){.l7-hero{display:block;}.l7-hero .seal{width:84px;}.l7-bar{flex-direction:column;align-items:stretch;}.l7-bar .l5-search{width:100%;}}
+
 .foot{margin-top:28px;padding:18px 4px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;color:var(--ink-3);border-top:1px solid var(--line);}
 
 /* ---- mobile ------------------------------------------------------------- */
@@ -243,11 +303,13 @@ button{font-family:inherit;cursor:pointer;}
 <div class="poc">
   <b>Patram</b><span class="tag">layout POC</span>
   <div class="seg" id="seg">
-    <button data-l="5" aria-current="true">★ Hero + index</button>
+    <button data-l="7" aria-current="true">★ Studio index</button>
+    <button data-l="5">5 · Hero + index</button>
     <button data-l="1">1 · Illuminated index</button>
     <button data-l="2">2 · Folio spread</button>
     <button data-l="3">3 · Top tabs</button>
     <button data-l="4">4 · ⌘K palette</button>
+    <button data-l="6">6 · Sidebar studio</button>
   </div>
 </div>
 <div class="poc-note" id="note"></div>
@@ -258,6 +320,8 @@ button{font-family:inherit;cursor:pointer;}
 <section class="screen" id="s3"></section>
 <section class="screen" id="s4"></section>
 <section class="screen" id="s5"></section>
+<section class="screen" id="s6"></section>
+<section class="screen" id="s7"></section>
 
 <script>
 const I = {
@@ -485,23 +549,137 @@ function buildL5(){
   };
 }
 
-buildL1();buildL2();buildL3();buildL4();buildL5();
+/* ---- LAYOUT 6 : sidebar nav rail + runtime-loading hero --------------- */
+function buildL6(){
+  const nav = GROUPS.map(g=>`
+    <div class="grouplabel">${g.cat}</div>
+    <div class="l6-nav">${g.tools.map(t=>`
+      <button class="l6-item" data-name="${t[0]}">
+        <span class="no">${String(FLAT.findIndex(x=>x.name===t[0])+1).padStart(2,"0")}</span>
+        <span class="nm">${t[0]}</span></button>`).join("")}</div>`).join("");
+  const consoleLines = [
+    "Fetching Python runtime (WebAssembly)…",
+    "Loading Pillow + lxml…",
+    "Installing pypdf, openpyxl, fpdf2, python-docx, python-pptx…",
+    "Loading engine…",
+  ].map(l=>`<div class="ln">${l}</div>`).join("")
+    + `<div class="ln ok">engine ready — nothing left this device</div>`;
+  s6.innerHTML = header + `
+    <div class="l6-wrap">
+      <aside class="l6-rail">${nav}</aside>
+      <div class="l6-main">
+        <div class="seal l6-seal">${seal()}</div>
+        <div class="eyebrow">Private document studio</div>
+        <h1>Work your PDFs. Nothing ever <span class="u">leaves this device</span>.</h1>
+        <p class="l6-lede">Merge, split, compress, OCR and convert — powered by Python compiled to WebAssembly and running right here in your browser. No account, no upload, no server.</p>
+        <p class="l6-quote"><b>Patram</b> — पत्रम्, Sanskrit for “leaf, page” — the palm leaf that Indian scribes wrote on for centuries. Yours stay just as private.</p>
+        <div class="l6-console">${consoleLines}</div>
+        <div class="l6-pills">
+          <span class="l6-trust">${I.shield}No file upload</span>
+          <span class="l6-trust">${I.shield}Runs offline once loaded</span>
+          <span class="l6-trust">${I.shield}Open the network tab — it stays quiet</span>
+        </div>
+        <p class="l6-cta">Pick a tool to begin.</p>
+      </div>
+    </div>` + foot;
+  s6.querySelectorAll(".l6-item").forEach(b=>b.onclick=()=>{
+    s6.querySelectorAll(".l6-item").forEach(x=>x.removeAttribute("aria-current"));
+    b.setAttribute("aria-current","true");
+  });
+}
+
+/* ---- LAYOUT 7 : studio index — hero sidebar + illuminated index ------- */
+function buildL7(){
+  const cards = FLAT.map((t,i)=>`
+    <button class="l1-card" data-name="${t.name}" data-cat="${t.cat}">
+      <span class="fol">${String(i+1).padStart(2,"0")}</span>
+      <span class="ico">${CATICON[t.cat]}</span>
+      <span class="nm">${t.name}</span><span class="ds">${t.desc}</span></button>`).join("");
+  const pills = ["All",...GROUPS.map(g=>g.cat)].map((c,i)=>
+    `<button class="l5-pill" data-cat="${c}" ${i===0?'aria-current="true"':""}>${c}</button>`).join("");
+  s7.innerHTML = header + `
+    <div class="l7-wrap">
+      <aside class="l7-hero">
+        <div class="seal">${seal()}</div>
+        <div class="eyebrow">Private document studio</div>
+        <h1>Work your PDFs. Nothing ever <span class="u">leaves this device</span>.</h1>
+        <p class="l7-lede">Merge, split, compress, OCR and convert — powered by Python compiled to WebAssembly, running right here in your browser. No account, no upload, no server.</p>
+        <div class="l7-trust">
+          <span class="l6-trust">${I.shield}No file upload</span>
+          <span class="l6-trust">${I.shield}Runs offline once loaded</span>
+          <span class="l6-trust">${I.shield}Network tab stays quiet</span>
+        </div>
+      </aside>
+      <div>
+        <div id="l7-landing">
+          <div class="l7-bar">
+            <div class="l5-pills">${pills}</div>
+            <div class="l5-search"><span style="color:var(--sindoor)">${I.search}</span>
+              <input id="l7-input" placeholder="Search all 16 tools…" autocomplete="off"><span class="kbd">⌘K</span></div>
+          </div>
+          <div class="l5-grid" id="l7-grid">${cards}</div>
+          <div class="l5-empty" id="l7-empty" style="display:none">No tool matches — try “merge”, “ocr”, or “word”.</div>
+        </div>
+        <div id="l7-work" style="display:none">
+          <button class="l1-back" id="l7-back">${I.back} Back to all tools</button>
+          <div class="l1-work">
+            <div class="tool-head"><div><h2 id="l7-title">Merge PDFs</h2><p id="l7-desc">Combine several PDFs into one.</p></div><span class="badge">Python</span></div>
+            <div class="grid2"><div>${sampleInput}</div><div><div class="panel-title">Result</div>${sampleOutput}</div></div>
+          </div>
+        </div>
+      </div>
+    </div>` + foot;
+
+  let activeCat="All";
+  const input=s7.querySelector("#l7-input");
+  function apply(){
+    const q=input.value.trim().toLowerCase();let vis=0;
+    s7.querySelectorAll("#l7-grid .l1-card").forEach(c=>{
+      const catOk=activeCat==="All"||c.dataset.cat===activeCat;
+      const qOk=(c.dataset.name+" "+c.dataset.cat).toLowerCase().includes(q);
+      const on=catOk&&qOk;c.style.display=on?"":"none";if(on)vis++;
+    });
+    s7.querySelector("#l7-empty").style.display=vis?"none":"";
+  }
+  input.addEventListener("input",apply);
+  s7.querySelectorAll(".l5-pill").forEach(p=>p.onclick=()=>{
+    s7.querySelectorAll(".l5-pill").forEach(x=>x.removeAttribute("aria-current"));
+    p.setAttribute("aria-current","true");activeCat=p.dataset.cat;apply();
+  });
+  s7.querySelectorAll("#l7-grid .l1-card").forEach(c=>c.onclick=()=>{
+    const meta=FLAT.find(x=>x.name===c.dataset.name);
+    s7.querySelector("#l7-title").textContent=c.dataset.name;
+    s7.querySelector("#l7-desc").textContent=meta?meta.desc:"";
+    s7.querySelector("#l7-landing").style.display="none";
+    s7.querySelector("#l7-work").style.display="";
+    window.scrollTo({top:0,behavior:"smooth"});
+  });
+  s7.querySelector("#l7-back").onclick=()=>{
+    s7.querySelector("#l7-work").style.display="none";
+    s7.querySelector("#l7-landing").style.display="";
+  };
+}
+
+buildL1();buildL2();buildL3();buildL4();buildL5();buildL6();buildL7();
 
 /* ⌘K / Ctrl-K focuses the hero search on the featured layout */
 document.addEventListener("keydown",e=>{
   if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"){
-    const inp=document.getElementById("l5-input");
-    if(inp&&document.getElementById("s5").classList.contains("on")){e.preventDefault();inp.focus();}
+    const on=document.querySelector(".screen.on");
+    const inp=on&&on.querySelector('input[id$="-input"]');
+    if(inp){e.preventDefault();inp.focus();}
   }
 });
 
 /* switcher */
 const NOTES = {
-  "5":"<b>Hero + pills + illuminated index (featured).</b> A centered mandala hero, iLovePDF-style <b>category pills</b> (All · Assemble · Optimize · …), and a flat card grid. <b>Tap a pill</b> or <b>type in search</b> (⌘K) to filter; <b>click a card</b> to open the workbench. Resize the window narrow to see the mobile layout.",
+  "7":"<b>Studio index (featured) — the mix.</b> The <b>hero moves into a sticky left sidebar</b> (mandala seal, headline, and privacy proof points), while the main column keeps the <b>illuminated index from Hero + index</b> — category pills, ⌘K search, and the card grid. <b>Click a card</b> to open the workbench; the hero panel stays in view. <b>Back to all tools</b> returns to the grid. Resize narrow to see the hero fold into a banner.",
+  "5":"<b>Hero + pills + illuminated index.</b> A centered mandala hero, iLovePDF-style <b>category pills</b> (All · Assemble · Optimize · …), and a flat card grid. <b>Tap a pill</b> or <b>type in search</b> (⌘K) to filter; <b>click a card</b> to open the workbench. Resize the window narrow to see the mobile layout.",
   "1":"<b>Illuminated index → workbench.</b> Browse every tool as an ornamented card, grouped like a manuscript's table of contents. Click a card to open a focused workbench. Best for discoverability — try clicking a card.",
   "2":"<b>Palm-leaf folio spread.</b> The workbench is an open manuscript: input on the left leaf, output on the right, split by a binding gutter with string-holes. A gilt spine switches tools. Most distinctive — the layout is the signature.",
   "3":"<b>Top tabs + wide stage.</b> Category tabs with a secondary tool row free the full width for one roomy workbench. Most app-like and space-efficient.",
   "4":"<b>Minimal + ⌘K palette.</b> A centered hero with the mandala seal and a single search field; a command palette filters all 16 tools. Cleanest and fastest for repeat users.",
+  "6":"<b>Sidebar studio.</b> A persistent left rail lists every tool numbered and grouped like a manuscript's contents; the main panel is a rich landing hero with the runtime-loading console and privacy proof points. Tools stay one click away at all times — most reference-like and app-persistent. <b>Click a tool</b> in the rail to select it.",
 };
 function show(n){
   document.querySelectorAll(".screen").forEach(s=>s.classList.remove("on"));
@@ -511,7 +689,7 @@ function show(n){
   window.scrollTo({top:0});
 }
 document.getElementById("seg").addEventListener("click",e=>{const b=e.target.closest("button");if(b)show(b.dataset.l);});
-show("5");
+show("7");
 </script>
 </body>
 </html>
