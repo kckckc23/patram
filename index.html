@@ -26,14 +26,51 @@
       <!-- signature: live engine readout, styled as a scribe's seal -->
       <div class="runtime" id="runtime" data-state="booting" role="status" aria-live="polite" title="The Python engine runs on your machine">
         <span class="led" aria-hidden="true"></span>
-        <span class="rt-label">runtime</span>
         <span class="rt-msg" id="rtMsg">starting…</span>
       </div>
     </header>
 
-    <main class="console">
-      <nav class="rail" id="rail" aria-label="Tools"></nav>
-      <section class="stage" id="stage" aria-live="polite"></section>
+    <main class="studio">
+      <!-- identity / thesis — persistent, sticky -->
+      <aside class="hero-panel">
+        <div class="seal" id="seal" aria-hidden="true"></div>
+        <div class="hero-copy">
+          <span class="eyebrow">Private document studio</span>
+          <h1>Work your PDFs. Nothing ever <span class="u">leaves this device</span>.</h1>
+          <p class="lede">Merge, split, compress, OCR and convert — powered by Python
+            compiled to WebAssembly, running right here in your browser. No account,
+            no upload, no server.</p>
+          <p class="origin"><b>Patram</b> — पत्रम्, Sanskrit for “leaf, page” — the palm
+            leaf that Indian scribes wrote on for centuries. Yours stay just as private.</p>
+        </div>
+        <div class="boot-readout" id="bootReadout"></div>
+        <div class="pledges" id="pledges"></div>
+      </aside>
+
+      <section class="main-col">
+        <!-- illuminated index: filter, search, card grid -->
+        <div class="index" id="index">
+          <div class="index-bar">
+            <div class="pills" id="pills" role="tablist" aria-label="Categories"></div>
+            <div class="search">
+              <span class="si" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg></span>
+              <input id="toolSearch" type="search" placeholder="Search all tools…" autocomplete="off" aria-label="Search tools" />
+              <span class="kbd" aria-hidden="true">⌘K</span>
+            </div>
+          </div>
+          <div class="tool-grid" id="grid"></div>
+          <p class="empty" id="empty" hidden>No tool matches — try “merge”, “ocr”, or “word”.</p>
+        </div>
+
+        <!-- workbench: opens in place when a tool is chosen -->
+        <div class="workbench" id="workbench" hidden>
+          <button class="back" id="back" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+            Back to all tools
+          </button>
+          <section class="stage" id="stage" aria-live="polite"></section>
+        </div>
+      </section>
     </main>
 
     <footer class="foot">
