@@ -1,0 +1,16 @@
+{
+  "name": "patram-fidelity",
+  "private": true,
+  "type": "module",
+  "description": "Document-fidelity benchmark harness for Patram (plan.md §7): deterministic corpus, reference renders, SSIM/pixel-diff scorecard.",
+  "scripts": {
+    "corpus": "node gen-corpus.mjs",
+    "references": "node render-references.mjs",
+    "selftest": "node compare.mjs --self"
+  },
+  "dependencies": {
+    "pixelmatch": "^7.1.0",
+    "pngjs": "^7.0.0",
+    "pyodide": "^314.0.2"
+  }
+}

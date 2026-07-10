@@ -53,6 +53,7 @@ const I = {
 const CATICON = {
   "Assemble": I.layers,
   "Optimize": I.min,
+  "Protect & repair": I.shield,
   "Extract": I.doc,
   "Convert to PDF": I.swap,
   "Convert from PDF": I.swap,
@@ -92,17 +93,52 @@ worker.onmessage = (e) => {
     document.querySelectorAll(".run[data-needs-engine]").forEach((b) => (b.disabled = false));
   }
   else if (m.type === "result") { const p = pending.get(m.id); if (p) { pending.delete(m.id); p.resolve(m); } }
+  else if (m.type === "status") { const p = pending.get(m.id); if (p && p.onStatus) p.onStatus(m.msg); setRuntime("busy", m.msg); }
   else if (m.type === "error") {
     if (m.id != null) { const p = pending.get(m.id); if (p) { pending.delete(m.id); p.reject(new Error(m.msg)); } }
     else { setRuntime("error", "engine failed"); pushBoot("ERROR: " + m.msg, true); }
   }
 };
-function callEngine(action, params, buffers) {
+function callEngine(action, params, buffers, onStatus) {
   return new Promise((resolve, reject) => {
     const id = ++reqId;
-    pending.set(id, { resolve, reject });
+    pending.set(id, { resolve, reject, onStatus });
     worker.postMessage({ id, action, params: params || {}, files: buffers || [] }, buffers || []);
   });
+}
+
+/* ---- qpdf worker (native PDF plumbing, lazy) ----------------------------- */
+let qpdfWorker = null, qpdfId = 0;
+const qpdfPending = new Map();
+function qpdfCall(op, params, buffer, onStatus) {
+  if (!qpdfWorker) {
+    qpdfWorker = new Worker("./qpdf-worker.js");
+    qpdfWorker.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === "status") { const p = qpdfPending.get(m.id); if (p && p.onStatus) p.onStatus(m.msg); return; }
+      const p = qpdfPending.get(m.id);
+      if (!p) return;
+      qpdfPending.delete(m.id);
+      if (m.type === "result") p.resolve(m); else p.reject(new Error(m.msg));
+    };
+  }
+  return new Promise((resolve, reject) => {
+    const id = ++qpdfId;
+    qpdfPending.set(id, { resolve, reject, onStatus });
+    qpdfWorker.postMessage({ id, op, params: params || {}, file: buffer }, [buffer]);
+  });
+}
+
+/* ---- engine download consent (heavy tools disclose size first) ----------- */
+const engineOk = (id) => { try { return !!localStorage.getItem("patram-engine-ok:" + id); } catch { return false; } };
+const engineMarkOk = (id) => { try { localStorage.setItem("patram-engine-ok:" + id, "1"); } catch {} };
+function requestPersistence() { // ask once a big engine is being fetched, inside a user gesture
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch {}
+}
+function engineHint(heavy) {
+  return el("p", { class: "engine-hint" },
+    `${I.shield} First use downloads the ${heavy.label} (~${heavy.mb} MB) from the CDN — cached on this device,
+     works offline afterwards. Your file still never leaves this device.`);
 }
 
 /* ---- lazy JS engines (CDN) ---------------------------------------------- */
@@ -143,8 +179,22 @@ const TOOLS = [
 
   { group: "Optimize" },
   { id: "compress", name: "Compress PDF", badge: "PYTHON",
-    desc: "Shrink file size losslessly, plus optional image recompression.",
+    desc: "Shrink file size — lossless cleanup up to full image downsampling.",
     engine: "compress" },
+  { id: "linearize", name: "Linearize PDF", badge: "QPDF",
+    desc: "Optimize for fast page-by-page web viewing (qpdf).",
+    engine: "qpdf", qpdf: "linearize", accept: ".pdf", suffix: "_linearized" },
+
+  { group: "Protect & repair" },
+  { id: "protect", name: "Protect PDF", badge: "QPDF",
+    desc: "Encrypt with a password — AES-256, applied on your device.",
+    engine: "qpdf", qpdf: "encrypt", accept: ".pdf", suffix: "_protected" },
+  { id: "unlock", name: "Unlock PDF", badge: "QPDF",
+    desc: "Remove a password you know from a PDF.",
+    engine: "qpdf", qpdf: "decrypt", accept: ".pdf", suffix: "_unlocked" },
+  { id: "repair", name: "Repair PDF", badge: "QPDF",
+    desc: "Rebuild a damaged file's structure (cross-reference recovery).",
+    engine: "qpdf", qpdf: "repair", accept: ".pdf", suffix: "_repaired" },
 
   { group: "Extract" },
   { id: "pdfText", name: "PDF → Text", badge: "PYTHON",
@@ -176,11 +226,15 @@ const TOOLS = [
 
   { group: "Convert from PDF" },
   { id: "pdfWord", name: "PDF → Word", badge: "PYTHON",
-    desc: "Extract text into an editable .docx document.",
-    engine: "convert", action: "pdfToWord", accept: ".pdf", out: "docx", suffix: "" },
+    desc: "Rebuild an editable .docx — flowing text, tables and images.",
+    engine: "convert", action: "pdfToWord", accept: ".pdf", out: "docx", suffix: "",
+    params: { engine: "hifi" }, fallbackParams: { engine: "basic" },
+    heavy: { mb: 33, label: "high-fidelity engine (pdf2docx)" } },
   { id: "pdfXlsx", name: "PDF → Excel", badge: "PYTHON",
-    desc: "Detect rows and columns into an .xlsx workbook.",
-    engine: "convert", action: "pdfToXlsx", accept: ".pdf", out: "xlsx", suffix: "" },
+    desc: "Detect real tables into an .xlsx workbook, sheet per page.",
+    engine: "convert", action: "pdfToXlsx", accept: ".pdf", out: "xlsx", suffix: "",
+    params: { engine: "hifi" }, fallbackParams: { engine: "basic" },
+    heavy: { mb: 8, label: "table-detection engine (pdfplumber)" } },
   { id: "pdfPpt", name: "PDF → PowerPoint", badge: "PYTHON",
     desc: "Turn each page's text into a .pptx slide.",
     engine: "convert", action: "pdfToPpt", accept: ".pdf", out: "pptx", suffix: "" },
@@ -258,7 +312,7 @@ function backToIndex() {
 
 /* ---- shared UI bits ------------------------------------------------------ */
 function renderToolHead(t) {
-  const local = t.badge === "PYTHON" || t.badge === "IN-BROWSER";
+  const local = t.badge === "PYTHON" || t.badge === "IN-BROWSER" || t.badge === "QPDF";
   return el("div", { class: "tool-head" },
     `<div><h2>${t.name}</h2><p>${t.desc}</p></div>
      <span class="badge ${local ? "local" : ""}">${t.badge}</span>`);
@@ -292,14 +346,16 @@ function fileChip(file, { onRemove, draggable } = {}) {
   }
   return chip;
 }
-function runButton(label) {
-  const b = el("button", { class: "run", type: "button", "data-needs-engine": "1" },
+function runButton(label, opts) {
+  const free = !!(opts && opts.free); // "free" buttons don't wait for the Python engine
+  const b = el("button", { class: "run", type: "button", ...(free ? {} : { "data-needs-engine": "1" }) },
     `${I.run}<span>${label}</span>`);
-  if (!engineReady) b.disabled = true;
+  b.baseLabel = label;
+  if (!free && !engineReady) b.disabled = true;
   b.setBusy = (busy, text) => {
-    b.disabled = busy || !engineReady;
+    b.disabled = busy || (!free && !engineReady);
     b.innerHTML = busy ? `<span class="spin">${I.spin}</span><span>${text || "Working…"}</span>`
-                       : `${I.run}<span>${label}</span>`;
+                       : `${I.run}<span>${b.baseLabel}</span>`;
   };
   return b;
 }
@@ -327,7 +383,7 @@ const readBuf = (file) => file.arrayBuffer();
 /* ---- engine renderers ---------------------------------------------------- */
 const ENGINES = {};
 
-/* generic single-file → downloadable file */
+/* generic single-file → downloadable file (with heavy-engine consent) */
 ENGINES.convert = (tool, root) => {
   const grid = el("div", { class: "grid2" });
   const left = el("div"), right = outColumn("Result");
@@ -335,12 +391,16 @@ ENGINES.convert = (tool, root) => {
   let file = null;
   const dz = dropzone({ accept: tool.accept, label: "Drop a file or click to browse",
     onFiles: (f) => { file = f[0]; renderLeft(); } });
-  const btn = runButton("Convert");
-  btn.addEventListener("click", async () => {
+  const firstUse = () => tool.heavy && !engineOk(tool.id);
+  const btn = runButton(firstUse() ? `Download engine (~${tool.heavy.mb} MB) & convert` : "Convert");
+  async function doRun(params) {
     if (!file) return;
+    if (tool.heavy) requestPersistence();
     try {
       await withBusy(btn, "Converting…", async () => {
-        const res = await callEngine(tool.action, {}, [await readBuf(file)]);
+        const res = await callEngine(tool.action, params, [await readBuf(file)],
+          (msg) => btn.setBusy(true, msg));
+        if (tool.heavy) { engineMarkOk(tool.id); btn.baseLabel = "Convert"; }
         const name = stem(file.name) + (tool.suffix || "") + "." + tool.out;
         right.body.innerHTML = "";
         right.body.appendChild(resultCard({
@@ -348,13 +408,70 @@ ENGINES.convert = (tool, root) => {
           stats: [["Output", fmtBytes(res.bytes.byteLength)]],
         }));
       });
-    } catch (err) { showError(right.body, err); }
-  });
+    } catch (err) {
+      showError(right.body, err);
+      if (tool.fallbackParams && params.engine !== tool.fallbackParams.engine) {
+        right.body.appendChild(el("button", { class: "tbtn", type: "button", style: "margin-top:10px",
+          onclick: () => { right.body.innerHTML = ""; right.body.appendChild(placeholder("Retrying…", "Using the basic extraction path.")); doRun({ ...tool.fallbackParams }); } },
+          `${I.swap} Try basic extraction instead`));
+      }
+    }
+  }
+  btn.addEventListener("click", () => doRun({ ...(tool.params || {}) }));
   function renderLeft() {
     left.innerHTML = "";
     left.appendChild(dz);
     if (file) { const files = el("div", { class: "files" }); files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } })); left.appendChild(files); }
     left.appendChild(btn);
+    if (firstUse()) left.appendChild(engineHint(tool.heavy));
+  }
+  renderLeft();
+  grid.append(left, right); root.appendChild(grid);
+};
+
+/* qpdf workbench: protect / unlock / repair / linearize */
+ENGINES.qpdf = (tool, root) => {
+  const grid = el("div", { class: "grid2" });
+  const left = el("div"), right = outColumn("Result");
+  right.body.appendChild(placeholder("Nothing yet", "Load a PDF to " + tool.name.toLowerCase() + "."));
+  let file = null;
+  const dz = dropzone({ accept: ".pdf", label: "Drop a PDF or click to browse",
+    onFiles: (f) => { file = f[0]; renderLeft(); } });
+  const pw = el("input", { class: "input mono", type: "password", placeholder: "Password", autocomplete: "new-password" });
+  const pw2 = el("input", { class: "input mono", type: "password", placeholder: "Repeat password", autocomplete: "new-password", style: "margin-top:8px" });
+  const btn = runButton(tool.name, { free: true });
+  btn.addEventListener("click", async () => {
+    if (!file) return;
+    if (tool.qpdf === "encrypt" && !pw.value) { showError(right.body, "Choose a password first."); return; }
+    if (tool.qpdf === "encrypt" && pw.value !== pw2.value) { showError(right.body, "The passwords don't match."); return; }
+    if (tool.qpdf === "decrypt" && !pw.value) { showError(right.body, "Enter the document's password."); return; }
+    try {
+      await withBusy(btn, "Working…", async () => {
+        const res = await qpdfCall(tool.qpdf, { password: pw.value }, await readBuf(file),
+          (msg) => btn.setBusy(true, msg));
+        right.body.innerHTML = "";
+        right.body.appendChild(resultCard({
+          bytes: res.bytes, name: `${stem(file.name)}${tool.suffix || ""}.pdf`, mime: MIME.pdf,
+          stats: [["Input", fmtBytes(file.size)], ["Output", fmtBytes(res.bytes.byteLength)]],
+        }));
+      });
+    } catch (err) { showError(right.body, err); }
+  });
+  function renderLeft() {
+    left.innerHTML = ""; left.appendChild(dz);
+    if (file) {
+      const files = el("div", { class: "files" });
+      files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } }));
+      left.appendChild(files);
+      if (tool.qpdf === "encrypt" || tool.qpdf === "decrypt") {
+        const field = el("div", { class: "field" },
+          `<label>${tool.qpdf === "encrypt" ? "Set a password · AES-256" : "Current password"}</label>`);
+        field.appendChild(pw);
+        if (tool.qpdf === "encrypt") field.appendChild(pw2);
+        left.appendChild(field);
+      }
+      left.appendChild(btn);
+    }
   }
   renderLeft();
   grid.append(left, right); root.appendChild(grid);
@@ -487,6 +604,7 @@ ENGINES.compress = (tool, root) => {
   right.body.appendChild(placeholder("Nothing yet", "Load a PDF and pick a level."));
   let file = null, quality = 65;
   const levels = [
+    { t: "Level 4", n: "Maximum", d: "Downsample images to ~110 DPI (engine ~17 MB, first use)", v: "max" },
     { t: "Level 3", n: "Strong", d: "Smaller, lighter images", v: 40 },
     { t: "Level 2", n: "Balanced", d: "Recommended", v: 65 },
     { t: "Level 1", n: "Light", d: "Best quality", v: 85 },
@@ -497,9 +615,13 @@ ENGINES.compress = (tool, root) => {
   btn.addEventListener("click", async () => {
     if (!file) return;
     const before = file.size;
+    const params = quality === "max" ? { mode: "max", dpi: 110, quality: 60 } : { quality };
+    if (quality === "max") requestPersistence();
     try {
       await withBusy(btn, "Compressing…", async () => {
-        const res = await callEngine("compress", { quality }, [await readBuf(file)]);
+        const res = await callEngine("compress", params, [await readBuf(file)],
+          (msg) => btn.setBusy(true, msg));
+        if (quality === "max") { engineMarkOk("compress-max"); btn.baseLabel = "Compress"; }
         const after = res.bytes.byteLength;
         const saved = Math.max(0, Math.round((1 - after / before) * 100));
         right.body.innerHTML = "";
@@ -522,7 +644,13 @@ ENGINES.compress = (tool, root) => {
           `<div class="ot">${lv.t}</div><div class="on">${lv.n}</div><div class="od">${lv.d}</div>`);
         opts.appendChild(o);
       });
-      field.appendChild(opts); left.appendChild(field); left.appendChild(btn);
+      field.appendChild(opts); left.appendChild(field);
+      btn.baseLabel = (quality === "max" && !engineOk("compress-max"))
+        ? "Download engine (~17 MB) & compress" : "Compress";
+      btn.setBusy(false);
+      left.appendChild(btn);
+      if (quality === "max" && !engineOk("compress-max"))
+        left.appendChild(engineHint({ mb: 17, label: "downsampling engine (PyMuPDF)" }));
     }
   }
   renderLeft();
@@ -910,6 +1038,12 @@ function renderHero() {
 /* ---- boot --------------------------------------------------------------- */
 buildIndex();
 renderHero();
+
+/* offline: cache the shell + engines so "works offline once loaded" holds */
+if ("serviceWorker" in navigator &&
+    (location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname))) {
+  navigator.serviceWorker.register("./sw.js").catch(() => {});
+}
 
 /* ⌘K / Ctrl-K jumps to the tool search (returning from the workbench first) */
 document.addEventListener("keydown", (e) => {

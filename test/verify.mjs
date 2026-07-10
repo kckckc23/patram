@@ -8,8 +8,9 @@
  */
 import { loadPyodide } from "pyodide";
 import { readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
-const CDN = "https://cdn.jsdelivr.net/pyodide/v0.28.1/full/";
+const CDN = "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/";
 const ok = (m) => console.log("  \x1b[32m✓\x1b[0m " + m);
 const step = (m) => console.log("\x1b[1m" + m + "\x1b[0m");
 
@@ -149,6 +150,67 @@ ok(`images → PDF → ${validPdf(r, "imagesToPdf")} pages (2 expected)`);
 const pc = run("pageCount", {}, [f.pdf]);
 if (pc.pages !== 4) throw new Error("pageCount wrong: " + pc.pages);
 ok(`pageCount → ${pc.pages}`);
+
+// ---- Unicode font pack (worker writes /fonts; here we copy from the repo) --
+step("Unicode text rendering (bundled font pack)…");
+try { py.FS.mkdir("/fonts"); } catch {}
+for (const name of ["NotoSans-Regular.ttf", "NotoSans-Bold.ttf",
+                    "NotoSansDevanagari-Regular.ttf", "NotoSansDevanagari-Bold.ttf"])
+  py.FS.writeFile("/fonts/" + name, readFileSync(new URL("../fonts/" + name, import.meta.url)));
+r = run("textToPdf", { text: "पत्रम् — एक निजी दस्तावेज़ स्टूडियो.\nAccents: naïve façade — čeština, русский, ελληνικά.", name: "unicode.txt" }, []);
+ok(`textToPdf (Devanagari + multi-script) → ${validPdf(r, "unicode textToPdf")} page(s)`);
+r = run("wordToPdf", {}, [f.docx]);
+ok(`DOCX → PDF with Unicode fonts → ${validPdf(r, "unicode wordToPdf")} page(s)`);
+
+// ---- qpdf.wasm: linearize / encrypt / decrypt / repair --------------------
+step("qpdf.wasm operations…");
+const createQpdf = (await import("@neslinesli93/qpdf-wasm")).default;
+const qpdfWasm = fileURLToPath(new URL("./node_modules/@neslinesli93/qpdf-wasm/dist/qpdf.wasm", import.meta.url));
+async function qpdf(args, input) {
+  const m = await createQpdf({ locateFile: () => qpdfWasm, noInitialRun: true, print: () => {}, printErr: () => {} });
+  m.FS.writeFile("/in.pdf", input);
+  let code = 0;
+  try { code = m.callMain([...args, "/in.pdf", "/out.pdf"]); }
+  catch (e) { code = typeof e?.status === "number" ? e.status : 1; }
+  if (code !== 0 && code !== 3) throw new Error("qpdf exit " + code + " for: " + args.join(" "));
+  return m.FS.readFile("/out.pdf");
+}
+r = await qpdf(["--linearize"], f.pdf);
+ok(`linearize → ${validPdf(r, "linearize")} pages`);
+const enc = await qpdf(["--encrypt", "pw", "pw", "256", "--"], f.pdf);
+ok(`encrypt AES-256 → ${(enc.byteLength / 1024).toFixed(1)}KB (opens only with password)`);
+r = await qpdf(["--password=pw", "--decrypt"], enc);
+ok(`decrypt → ${validPdf(r, "decrypt")} pages`);
+r = await qpdf([], f.pdf);
+ok(`repair pass → ${validPdf(r, "repair")} pages`);
+
+// ---- heavy engines (run with --full; downloads ~40MB of wheels once) ------
+if (process.argv.includes("--full")) {
+  step("Heavy engines (--full): PyMuPDF, pdf2docx, pdfplumber…");
+  await py.runPythonAsync(`
+import micropip
+await micropip.install(["pymupdf", "opencv-python", "numpy", "fonttools", "fire"])
+await micropip.install("pdf2docx", deps=False)
+await micropip.install(["pdfminer.six"])
+await micropip.install("pdfplumber", deps=False)
+`);
+  ok("engines installed in WASM");
+
+  r = run("compress", { mode: "max", dpi: 110, quality: 60 }, [f.pdf]);
+  ok(`compress max (PyMuPDF downsample) → VALID pdf, ${validPdf(r, "compress max")} pages`);
+
+  r = run("pdfToWord", { engine: "hifi" }, [f.pdf]);
+  py.FS.writeFile("/o2.docx", r);
+  const paras = py.runPython(`import docx; len(docx.Document("/o2.docx").paragraphs)`);
+  ok(`PDF → Word (pdf2docx) → valid docx, ${paras} paragraphs (${(r.byteLength / 1024).toFixed(1)}KB)`);
+
+  r = run("pdfToXlsx", { engine: "hifi" }, [f.pdf]);
+  py.FS.writeFile("/o2.xlsx", r);
+  const sheets = py.runPython(`from openpyxl import load_workbook; len(load_workbook("/o2.xlsx").sheetnames)`);
+  ok(`PDF → Excel (pdfplumber) → valid workbook, ${sheets} sheets (${(r.byteLength / 1024).toFixed(1)}KB)`);
+} else {
+  step("(skipped heavy engines — run `node verify.mjs --full` to include PyMuPDF/pdf2docx/pdfplumber)");
+}
 
 // stash a couple of browsable samples
 writeFileSync(new URL("../samples/sample.pdf", import.meta.url), f.pdf);

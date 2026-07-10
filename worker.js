@@ -3,9 +3,11 @@
  *
  * Runs on the user's machine, off the UI thread. Loads the Python runtime once,
  * installs the pure-Python PDF libraries, then executes pdf_tools.dispatch()
- * against file bytes. No file ever leaves the browser.
+ * against file bytes. Heavy engines (PyMuPDF, pdf2docx, pdfplumber) and the
+ * Unicode font pack are fetched lazily on first use and cached by the browser.
+ * No file ever leaves the browser.
  */
-const PYODIDE_VERSION = "0.28.1";
+const PYODIDE_VERSION = "314.0.2";
 const BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 importScripts(BASE + "pyodide.js");
 
@@ -30,10 +32,76 @@ async function boot() {
 
 const ready = boot().catch((e) => post("error", { msg: "Engine failed to start: " + e }));
 
+/* ---- Unicode font pack — fetched on first text-rendering job ------------- */
+const FONT_FILES = [
+  "NotoSans-Regular.ttf", "NotoSans-Bold.ttf",
+  "NotoSansDevanagari-Regular.ttf", "NotoSansDevanagari-Bold.ttf",
+];
+const FONT_ACTIONS = new Set(["textToPdf", "wordToPdf", "tableToPdf", "pptToPdf"]);
+let fontsReady = null;
+function ensureFonts(note) {
+  if (!fontsReady) {
+    fontsReady = (async () => {
+      note("fetching Unicode fonts (≈1.7 MB, one-time)…");
+      try { pyodide.FS.mkdir("/fonts"); } catch {}
+      await Promise.all(FONT_FILES.map(async (f) => {
+        const r = await fetch("./fonts/" + f);
+        if (!r.ok) throw new Error("font fetch failed: " + f);
+        pyodide.FS.writeFile("/fonts/" + f, new Uint8Array(await r.arrayBuffer()));
+      }));
+    })().catch((e) => { fontsReady = null; throw e; });
+  }
+  return fontsReady;
+}
+
+/* ---- heavy engines — installed on first use, then resident --------------- */
+const ENGINE_SETUP = {
+  pymupdf: {
+    note: "downloading compression engine (≈17 MB, one-time)…",
+    py: `import micropip\nawait micropip.install("pymupdf")`,
+  },
+  pdf2docx: {
+    note: "downloading high-fidelity PDF→Word engine (≈33 MB, one-time)…",
+    py: `import micropip
+await micropip.install(["pymupdf", "opencv-python", "numpy", "fonttools", "fire"])
+await micropip.install("pdf2docx", deps=False)`,
+  },
+  pdfplumber: {
+    note: "downloading table-detection engine (≈8 MB, one-time)…",
+    py: `import micropip
+await micropip.install(["pdfminer.six"])
+await micropip.install("pdfplumber", deps=False)`,
+  },
+};
+const engines = {};
+function ensureEngine(name, note) {
+  if (!engines[name]) {
+    engines[name] = (async () => {
+      note(ENGINE_SETUP[name].note);
+      await pyodide.runPythonAsync(ENGINE_SETUP[name].py);
+    })().catch((e) => { engines[name] = null; throw e; });
+  }
+  return engines[name];
+}
+function requiredEngine(action, p) {
+  if (action === "pdfToWord" && p.engine === "hifi") return "pdf2docx";
+  if (action === "pdfToXlsx" && p.engine === "hifi") return "pdfplumber";
+  if (action === "compress" && p.mode === "max") return "pymupdf";
+  return null;
+}
+
 self.onmessage = async (e) => {
   const { id, action, params, files } = e.data; // files: array of ArrayBuffer
+  const note = (msg) => post("status", { id, msg });
   try {
     await ready;
+    if (!pyodide) throw new Error("Engine is not running.");
+
+    // fonts are an enhancement — if they can't be fetched, render with core fonts
+    if (FONT_ACTIONS.has(action)) await ensureFonts(note).catch(() => {});
+    const eng = requiredEngine(action, params || {});
+    if (eng) { await ensureEngine(eng, note); note("engine ready — working…"); }
+
     (files || []).forEach((buf, i) => pyodide.FS.writeFile("/in" + i, new Uint8Array(buf)));
 
     const p = { ...(params || {}), n: (files || []).length };
