@@ -30,8 +30,42 @@ def _save(writer: PdfWriter) -> bytes:
 
 
 def _latin1(s) -> str:
-    # fpdf2 core fonts are latin-1 only; sanitize until a Unicode TTF is bundled.
+    # fpdf2 core fonts are latin-1 only; used only when the font pack is absent.
     return str(s).encode("latin-1", "replace").decode("latin-1")
+
+
+FONT_DIR = "/fonts"
+
+
+def _register_fonts(pdf):
+    """Register the bundled Unicode fonts (worker writes them into /fonts) on an
+    FPDF instance. Returns the body family — NotoSans with a Devanagari fallback
+    when the pack is present, or None to signal core-font (latin-1) mode."""
+    import os
+
+    if not os.path.isfile(f"{FONT_DIR}/NotoSans-Regular.ttf"):
+        return None
+    try:
+        pdf.add_font("NotoSans", "", f"{FONT_DIR}/NotoSans-Regular.ttf")
+        pdf.add_font("NotoSans", "B", f"{FONT_DIR}/NotoSans-Bold.ttf")
+        pdf.add_font("NotoDeva", "", f"{FONT_DIR}/NotoSansDevanagari-Regular.ttf")
+        if os.path.isfile(f"{FONT_DIR}/NotoSansDevanagari-Bold.ttf"):
+            pdf.add_font("NotoDeva", "B", f"{FONT_DIR}/NotoSansDevanagari-Bold.ttf")
+        try:
+            pdf.set_fallback_fonts(["NotoDeva"], exact_match=False)
+        except TypeError:
+            pdf.set_fallback_fonts(["NotoDeva"])
+        return "NotoSans"
+    except Exception:
+        return None
+
+
+def _face(pdf) -> str:
+    return getattr(pdf, "uni_family", None) or "Helvetica"
+
+
+def _txt(pdf, s) -> str:
+    return str(s) if getattr(pdf, "uni_family", None) else _latin1(s)
 
 
 def parse_page_ranges(spec: str, total: int):
@@ -153,6 +187,22 @@ def compress_pdf(data: bytes, image_quality: int = 60) -> bytes:
     return _save(writer)
 
 
+def compress_pdf_max(data: bytes, dpi: int = 110, quality: int = 60) -> bytes:
+    """Ghostscript-style compression via PyMuPDF (worker loads it on demand):
+    downsample images above ~1.3× the target DPI, recompress as JPEG, then
+    rebuild with full garbage collection. Never returns a larger file."""
+    import pymupdf
+
+    doc = pymupdf.open(stream=data, filetype="pdf")
+    try:
+        doc.rewrite_images(dpi_threshold=int(dpi * 1.3), dpi_target=dpi,
+                           quality=quality, lossy=True, lossless=True)
+        out = doc.tobytes(garbage=4, deflate=True)
+    finally:
+        doc.close()
+    return out if len(out) < len(data) else data
+
+
 # --------------------------------------------------------------------------- #
 # text extraction / generation
 # --------------------------------------------------------------------------- #
@@ -173,6 +223,7 @@ def _new_pdf(orientation="P", fmt="letter"):
 
     pdf = FPDF(orientation=orientation, unit="pt", format=fmt)
     pdf.set_auto_page_break(True, margin=48)
+    pdf.uni_family = _register_fonts(pdf)
     return pdf
 
 
@@ -188,13 +239,13 @@ def _mcell(pdf, h, text):
 def text_to_pdf(text: str, name: str = "document") -> bytes:
     pdf = _new_pdf()
     pdf.add_page()
-    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_font(_face(pdf), "B", 9)
     pdf.set_text_color(120, 120, 120)
-    pdf.cell(0, 12, _latin1(name), new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 12, _txt(pdf, name), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(6)
-    pdf.set_font("Helvetica", size=11)
+    pdf.set_font(_face(pdf), size=11)
     pdf.set_text_color(20, 20, 20)
-    for line in _latin1(text).split("\n"):
+    for line in _txt(pdf, text).split("\n"):
         _mcell(pdf, 15, line)
     return bytes(pdf.output())
 
@@ -222,12 +273,13 @@ def table_to_pdf(data: bytes, is_csv: bool) -> bytes:
     rows = _rows_from_csv(data) if is_csv else _rows_from_xlsx(data)
     rows = [r for r in rows if any(str(c).strip() for c in r)] or [["(empty file)"]]
     ncols = max(len(r) for r in rows)
-    rows = [[_latin1(c) for c in r] + [""] * (ncols - len(r)) for r in rows]
 
     pdf = FPDF(orientation="L", unit="pt", format="a4")
     pdf.set_auto_page_break(True, margin=32)
+    pdf.uni_family = _register_fonts(pdf)
+    rows = [[_txt(pdf, c) for c in r] + [""] * (ncols - len(r)) for r in rows]
     pdf.add_page()
-    pdf.set_font("Helvetica", size=8)
+    pdf.set_font(_face(pdf), size=8)
     with pdf.table(first_row_as_headings=True) as table:
         for r in rows:
             trow = table.row()
@@ -270,21 +322,68 @@ def word_to_pdf(data: bytes) -> bytes:
     doc = docx.Document(io.BytesIO(data))
     pdf = _new_pdf()
     pdf.add_page()
+    face = _face(pdf)
     for para in doc.paragraphs:
-        text = _latin1(para.text)
+        text = _txt(pdf, para.text)
         style = (para.style.name or "").lower() if para.style else ""
         if not text.strip():
             pdf.ln(8)
             continue
         if "heading 1" in style or style == "title":
-            pdf.set_font("Helvetica", "B", 18)
+            pdf.set_font(face, "B", 18)
         elif "heading" in style:
-            pdf.set_font("Helvetica", "B", 14)
+            pdf.set_font(face, "B", 14)
         else:
-            pdf.set_font("Helvetica", size=11)
+            pdf.set_font(face, size=11)
         _mcell(pdf, 16, text)
         pdf.ln(2)
     return bytes(pdf.output())
+
+
+def pdf_to_word_hifi(data: bytes) -> bytes:
+    """Layout-aware PDF→DOCX via pdf2docx: flowing paragraphs, ruled tables,
+    images. The worker installs the engine on first use."""
+    from pdf2docx import Converter
+
+    with open("/hifi.pdf", "wb") as fh:
+        fh.write(data)
+    cv = Converter("/hifi.pdf")
+    try:
+        cv.convert("/hifi.docx")
+    finally:
+        cv.close()
+    with open("/hifi.docx", "rb") as fh:
+        return fh.read()
+
+
+def pdf_to_xlsx_hifi(data: bytes) -> bytes:
+    """Layout-aware PDF→XLSX via pdfplumber's table detection; pages without
+    detectable tables fall back to whitespace-split text rows."""
+    import re
+
+    import pdfplumber
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    wb.remove(wb.active)
+    with pdfplumber.open(io.BytesIO(data)) as pdf:
+        for i, page in enumerate(pdf.pages, 1):
+            ws = wb.create_sheet(f"Page {i}"[:31])
+            tables = page.extract_tables()
+            if tables:
+                for t in tables:
+                    for row in t:
+                        ws.append(["" if c is None else str(c) for c in row])
+                    ws.append([])
+            else:
+                for line in (page.extract_text() or "").split("\n"):
+                    if line.strip():
+                        ws.append(re.split(r"\s{2,}", line.strip()))
+    if not wb.sheetnames:
+        wb.create_sheet("Empty")
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue()
 
 
 def pdf_to_word(data: bytes) -> bytes:
@@ -328,16 +427,17 @@ def ppt_to_pdf(data: bytes) -> bytes:
 
     prs = Presentation(io.BytesIO(data))
     pdf = _new_pdf(orientation="L", fmt="a4")
+    face = _face(pdf)
     for parts in _slide_texts(prs):
         pdf.add_page()
         title = parts[0] if parts else "Slide"
         body = parts[1:] if len(parts) > 1 else []
-        pdf.set_font("Helvetica", "B", 22)
-        _mcell(pdf, 28, _latin1(title))
+        pdf.set_font(face, "B", 22)
+        _mcell(pdf, 28, _txt(pdf, title))
         pdf.ln(8)
-        pdf.set_font("Helvetica", size=13)
+        pdf.set_font(face, size=13)
         for line in body:
-            _mcell(pdf, 20, _latin1("-  " + line))
+            _mcell(pdf, 20, _txt(pdf, "-  " + line))
     if pdf.page_no() == 0:
         pdf.add_page()
     return bytes(pdf.output())
@@ -427,17 +527,21 @@ def dispatch(action: str, params_json: str = "") -> str:
     elif action == "organize":
         out = organize_pdf(files[0], p["order"])
     elif action == "compress":
-        out = compress_pdf(files[0], int(p.get("quality", 60)))
+        if p.get("mode") == "max":
+            out = compress_pdf_max(files[0], int(p.get("dpi", 110)),
+                                   int(p.get("quality", 60)))
+        else:
+            out = compress_pdf(files[0], int(p.get("quality", 60)))
     elif action == "textToPdf":
         out = text_to_pdf(p.get("text", ""), p.get("name", "document"))
     elif action == "tableToPdf":
         out = table_to_pdf(files[0], bool(p.get("isCsv")))
     elif action == "pdfToXlsx":
-        out = pdf_to_xlsx(files[0])
+        out = pdf_to_xlsx_hifi(files[0]) if p.get("engine") == "hifi" else pdf_to_xlsx(files[0])
     elif action == "wordToPdf":
         out = word_to_pdf(files[0])
     elif action == "pdfToWord":
-        out = pdf_to_word(files[0])
+        out = pdf_to_word_hifi(files[0]) if p.get("engine") == "hifi" else pdf_to_word(files[0])
     elif action == "pptToPdf":
         out = ppt_to_pdf(files[0])
     elif action == "pdfToPpt":
