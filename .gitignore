@@ -1,10 +1,6 @@
+.gitignore
+.claude
 node_modules/
-build/
-dist/
-coverage/
-.DS_Store
-*.log
-.vercel
-# generated test artifacts
-samples/sample.pdf
-samples/sample_table.pdf
+test/fidelity/corpus/
+test/fidelity/references/
+test/fidelity/scorecard.*

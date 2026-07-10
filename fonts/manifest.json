@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "families": {
+    "Carlito": {
+      "files": {
+        "regular": "Carlito-Regular.ttf",
+        "bold": "Carlito-Bold.ttf",
+        "italic": "Carlito-Italic.ttf",
+        "bolditalic": "Carlito-BoldItalic.ttf"
+      },
+      "license": "licenses/Carlito-OFL.txt",
+      "bytes": 2734244
+    },
+    "Caladea": {
+      "files": {
+        "regular": "Caladea-Regular.ttf",
+        "bold": "Caladea-Bold.ttf",
+        "italic": "Caladea-Italic.ttf",
+        "bolditalic": "Caladea-BoldItalic.ttf"
+      },
+      "license": "licenses/Caladea-OFL.txt",
+      "bytes": 333228
+    },
+    "Arimo": {
+      "files": {
+        "regular": "Arimo-Regular.ttf",
+        "bold": "Arimo-Bold.ttf",
+        "italic": "Arimo-Italic.ttf",
+        "bolditalic": "Arimo-BoldItalic.ttf"
+      },
+      "license": "licenses/Arimo-OFL.txt",
+      "bytes": 1975424
+    },
+    "Tinos": {
+      "files": {
+        "regular": "Tinos-Regular.ttf",
+        "bold": "Tinos-Bold.ttf",
+        "italic": "Tinos-Italic.ttf",
+        "bolditalic": "Tinos-BoldItalic.ttf"
+      },
+      "license": "licenses/Tinos-OFL.txt",
+      "bytes": 2263460
+    },
+    "Cousine": {
+      "files": {
+        "regular": "Cousine-Regular.ttf",
+        "bold": "Cousine-Bold.ttf",
+        "italic": "Cousine-Italic.ttf",
+        "bolditalic": "Cousine-BoldItalic.ttf"
+      },
+      "license": "licenses/Cousine-OFL.txt",
+      "bytes": 1210076
+    },
+    "Noto Sans": {
+      "files": {
+        "regular": "NotoSans-Regular.ttf",
+        "bold": "NotoSans-Bold.ttf"
+      },
+      "license": "licenses/NotoSans-OFL.txt",
+      "bytes": 1253056
+    },
+    "Noto Sans Devanagari": {
+      "files": {
+        "regular": "NotoSansDevanagari-Regular.ttf",
+        "bold": "NotoSansDevanagari-Bold.ttf"
+      },
+      "license": "licenses/NotoSansDevanagari-OFL.txt",
+      "bytes": 495188
+    }
+  },
+  "substitutes": {
+    "Calibri": "Carlito",
+    "Cambria": "Caladea",
+    "Arial": "Arimo",
+    "Helvetica": "Arimo",
+    "Times New Roman": "Tinos",
+    "Courier New": "Cousine",
+    "Segoe UI": "Arimo",
+    "default": "Noto Sans",
+    "devanagari": "Noto Sans Devanagari"
+  },
+  "textEngine": {
+    "base": [
+      "NotoSans-Regular.ttf",
+      "NotoSans-Bold.ttf"
+    ],
+    "fallbacks": [
+      "NotoSansDevanagari-Regular.ttf"
+    ]
+  },
+  "totalBytes": 10264676
+}

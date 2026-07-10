@@ -1,0 +1,61 @@
+Patram — पत्रम् · a private, on-device document studio
+Copyright (C) 2026 Patram contributors
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version. See the LICENSE file for the full text.
+
+Patram runs entirely on the user's device. It loads the following third-party
+components at runtime (from a CDN or bundled in this repository). Each remains
+under its own license; source locations are given for copyleft compliance.
+
+Runtime engines (CDN-loaded, executed in the browser)
+-----------------------------------------------------
+- Pyodide (Python/WebAssembly runtime) — MPL-2.0
+  https://github.com/pyodide/pyodide
+- pypdf — BSD-3-Clause — https://github.com/py-pdf/pypdf
+- fpdf2 — LGPL-3.0 — https://github.com/py-pdf/fpdf2
+- openpyxl — MIT — https://foss.heptapod.net/openpyxl/openpyxl
+- python-docx — MIT — https://github.com/python-openxml/python-docx
+- python-pptx — MIT — https://github.com/scanny/python-pptx
+- Pillow — MIT-CMU — https://github.com/python-pillow/Pillow
+- pdf.js (pdfjs-dist) — Apache-2.0 — https://github.com/mozilla/pdf.js
+- tesseract.js — Apache-2.0 — https://github.com/naptha/tesseract.js
+- JSZip — MIT/GPLv3 dual — https://github.com/Stuk/jszip
+- qpdf, compiled to WebAssembly — Apache-2.0
+  qpdf: https://github.com/qpdf/qpdf
+  WASM build (@neslinesli93/qpdf-wasm, ISC wrapper): https://github.com/neslinesli93/qpdf-wasm
+- PyMuPDF / MuPDF (loaded on demand for high-fidelity tools) — AGPL-3.0
+  https://github.com/pymupdf/PyMuPDF · https://mupdf.com
+  Corresponding Source for the exact wheel: the Pyodide distribution index
+  (https://github.com/pyodide/pyodide) and https://github.com/pymupdf/PyMuPDF
+- pdf2docx (loaded on demand for PDF→Word) — MIT
+  https://github.com/ArtifexSoftware/pdf2docx
+- pdfplumber / pdfminer.six (loaded on demand for PDF→Excel) — MIT
+  https://github.com/jsvine/pdfplumber · https://github.com/pdfminer/pdfminer.six
+- OpenCV (opencv-python, dependency of pdf2docx) — Apache-2.0
+  https://github.com/opencv/opencv-python
+- NumPy — BSD-3-Clause — https://github.com/numpy/numpy
+
+Bundled fonts (fonts/ directory)
+--------------------------------
+Metric-compatible substitute fonts, each under the SIL Open Font License 1.1
+or Apache License 2.0 — see fonts/licenses/ for the license text shipped with
+each family:
+- Carlito (Google) — OFL-1.1 — metric-compatible with Calibri
+- Caladea (Huerta Tipográfica) — OFL-1.1 — metric-compatible with Cambria
+- Arimo, Tinos, Cousine (Steve Matteson / Monotype) — metric-compatible with
+  Arial, Times New Roman, Courier New
+- Noto Sans, Noto Sans Devanagari (Google) — OFL-1.1
+
+The OFL permits bundling, web serving, and embedding these fonts (or subsets)
+in generated documents; it forbids selling the fonts standalone. License
+notices are preserved in fonts/licenses/.
+
+Trademarks
+----------
+Microsoft, Word, Excel, PowerPoint, Calibri, Cambria and Aptos are trademarks
+of Microsoft Corporation. Patram is not affiliated with or endorsed by
+Microsoft. Font substitution references are statements of metric
+compatibility, not identity.
