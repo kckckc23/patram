@@ -4,7 +4,8 @@
   "type": "module",
   "description": "Headless Node+Pyodide harness that verifies pdf_tools.py. Dev-only; the deployed static site never uses node_modules.",
   "dependencies": {
+    "@neslinesli93/qpdf-wasm": "^0.3.0",
     "puppeteer": "^23.11.1",
-    "pyodide": "^0.28.1"
+    "pyodide": "^314.0.2"
   }
 }

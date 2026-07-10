@@ -47,6 +47,19 @@ await page.waitForSelector("#stage .text-out", { timeout: 60000 });
 const len = await page.$eval("#stage .text-out", (n) => n.textContent.length);
 ok("pdf→text rendered " + len + " chars in the output panel");
 
+// --- Linearize (qpdf.wasm, engine-independent worker) ---
+console.log("\x1b[1mLinearize (qpdf) tool…\x1b[0m");
+await page.click("#back");
+await page.waitForSelector('.tool-card[data-id="linearize"]', { visible: true });
+await page.click('.tool-card[data-id="linearize"]');
+await page.waitForSelector("#stage .drop");
+const c3 = await page.$('#stage input[type="file"]');
+await c3.uploadFile(SAMPLE);
+await page.waitForSelector("#stage .run:not([disabled])");
+await page.click("#stage .run");
+await page.waitForSelector("#stage .btn-dl", { timeout: 60000 });
+ok("qpdf linearize produced a download (qpdf.wasm loaded in-browser)");
+
 if (errors.length) { console.log("\x1b[31mpage errors:\x1b[0m\n" + errors.join("\n")); await browser.close(); process.exit(1); }
-console.log("\n\x1b[32mBROWSER SMOKE TEST PASSED\x1b[0m — UI + worker + Python engine work end to end in a real browser.");
+console.log("\n\x1b[32mBROWSER SMOKE TEST PASSED\x1b[0m — UI + workers + engines work end to end in a real browser.");
 await browser.close();
