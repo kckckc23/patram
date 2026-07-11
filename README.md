@@ -31,16 +31,21 @@ worker.js → Pyodide (Python/WASM) → pdf_tools.py    qpdf-worker.js → qpdf.
 sw.js  ← service worker: shell network-first, engines cache-first → real offline
 ```
 
-- **Core Python tools** (`pdf_tools.py`, run in `worker.js`): merge, split, delete,
-  organize & rotate, compress, PDF↔Text, images→PDF, Word↔PDF, Excel/CSV↔PDF,
-  PowerPoint↔PDF.
+- **Core Python tools** (`pdf_tools.py`, run in `worker.js`): merge, split (single
+  range, every-N, or several ranges → zip), delete, organize & rotate, compress,
+  stamp/watermark/page numbers, strip metadata, PDF↔Text, images→PDF, Word↔PDF,
+  Excel/CSV↔PDF, PowerPoint↔PDF.
 - **High-fidelity tools** (engines fetched on first use, with a size disclosure, then
   cached for offline): PDF→Word rebuilds flowing text/tables/images via **pdf2docx**
   (~33 MB); PDF→Excel detects real tables via **pdfplumber** (~8 MB); Compress
   "Maximum" downsamples images Ghostscript-style via **PyMuPDF** (~17 MB).
 - **qpdf tools** (`qpdf-worker.js`, ~1.3 MB): Protect (AES-256), Unlock, Repair
   (xref recovery), Linearize (fast web view).
-- **In-browser JS tools**: PDF→Images (pdf.js) and OCR (tesseract.js).
+- **In-browser JS tools**: PDF→Images (pdf.js) and OCR (tesseract.js, incl. Hindi) —
+  OCR can also emit a **searchable PDF** (the scan with an invisible text layer).
+- **Installable**: a web-app manifest makes Patram installable (PWA); on iOS,
+  installing to the Home Screen also protects the offline cache from Safari's
+  7-day purge.
 - **Fonts** (`fonts/`): an OFL-licensed pack — Noto Sans + Noto Sans Devanagari for
   Unicode PDF generation (loaded into the engine on first text-rendering job), plus
   metric-compatible substitutes for common Office fonts (Carlito↔Calibri,

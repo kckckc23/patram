@@ -7,9 +7,10 @@
  * responses are stored (opaque responses are quota-padded and unusable under
  * a future cross-origin-isolated deployment).
  */
-const VERSION = "patram-sw-v4";
+const VERSION = "patram-sw-v5";
 const CORE = [
   "./", "./index.html", "./styles.css", "./app.js", "./favicon.svg",
+  "./manifest.webmanifest",
   "./worker.js", "./qpdf-worker.js", "./pdf_tools.py", "./fonts/manifest.json",
 ];
 const ENGINE_HOSTS = new Set([

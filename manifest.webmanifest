@@ -1,0 +1,14 @@
+{
+  "name": "Patram — private document studio",
+  "short_name": "Patram",
+  "description": "Merge, split, compress, protect, OCR and convert PDFs — processed entirely on your device. No upload, no account, works offline.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6ecd7",
+  "theme_color": "#c0261d",
+  "icons": [
+    { "src": "./favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
