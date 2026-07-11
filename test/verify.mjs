@@ -119,6 +119,30 @@ ok(`CSV → PDF → ${validPdf(r, "tableToPdf")} page(s)`);
 r = run("tableToPdf", { isCsv: false }, [f.xlsx]);
 ok(`XLSX → PDF → ${validPdf(r, "xlsx tableToPdf")} page(s)`);
 
+// styled workbook: bold+fill headers, dates, merged cells, custom widths, 2 sheets
+py.runPython(`
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
+import datetime
+wb = Workbook()
+ws = wb.active; ws.title = "Revenue"
+ws.append(["Region", "Units", "Revenue", "Date"])
+for c in ws[1]:
+    c.font = Font(bold=True, color="FF7A2E12")
+    c.fill = PatternFill("solid", fgColor="FFF3DFB8")
+ws.append(["North", 120, 1400.5, datetime.date(2026, 1, 15)])
+ws.append(["South", 98, 1100, datetime.date(2026, 2, 1)])
+ws.merge_cells("A4:B4"); ws["A4"] = "Total"
+ws["A4"].alignment = Alignment(horizontal="right"); ws["C4"] = 2500.5
+ws.column_dimensions["A"].width = 20
+ws2 = wb.create_sheet("Notes"); ws2["A1"] = "Second sheet renders on its own page"
+wb.save("/f_styled.xlsx")
+`);
+r = run("tableToPdf", { isCsv: false }, [read("/f_styled.xlsx")]);
+const sheetPages = validPdf(r, "styled xlsx");
+if (sheetPages !== 2) throw new Error("styled xlsx: expected 2 pages (one per sheet), got " + sheetPages);
+ok(`styled XLSX (bold/fill/merge/dates, 2 sheets) → PDF → ${sheetPages} pages`);
+
 r = run("pdfToXlsx", {}, [f.pdf]);
 py.FS.writeFile("/o.xlsx", r);
 py.runPython(`from openpyxl import load_workbook; load_workbook("/o.xlsx")`);

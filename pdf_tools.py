@@ -419,24 +419,110 @@ def text_to_pdf(text: str, name: str = "document") -> bytes:
 # --------------------------------------------------------------------------- #
 # spreadsheets (openpyxl) <-> PDF (fpdf2)
 # --------------------------------------------------------------------------- #
-def _rows_from_xlsx(data: bytes):
-    from openpyxl import load_workbook
-
-    wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
-    ws = wb.active
-    return [["" if c is None else str(c) for c in row]
-            for row in ws.iter_rows(values_only=True)]
-
-
 def _rows_from_csv(data: bytes):
     text = data.decode("utf-8", errors="replace")
     return list(csv.reader(io.StringIO(text)))
 
 
+def _cellstr(v) -> str:
+    import datetime as dt
+
+    if v is None:
+        return ""
+    if isinstance(v, dt.datetime):
+        return v.strftime("%Y-%m-%d %H:%M") if (v.hour or v.minute or v.second) else v.strftime("%Y-%m-%d")
+    if isinstance(v, dt.date):
+        return v.strftime("%Y-%m-%d")
+    if isinstance(v, float) and v == int(v):
+        return str(int(v))
+    return str(v)
+
+
+def _argb(color):
+    """openpyxl color → (r, g, b), or None for absent/transparent/theme colors."""
+    try:
+        rgb = getattr(color, "rgb", None)
+        if isinstance(rgb, str) and len(rgb) == 8 and rgb[:2] != "00":
+            return tuple(int(rgb[i:i + 2], 16) for i in (2, 4, 6))
+    except Exception:
+        pass
+    return None
+
+
+def _xlsx_to_pdf(data: bytes) -> bytes:
+    """Styled, multi-sheet XLSX rendering: one section per sheet, real column
+    widths, bold/fill/font colors, alignment, dates formatted, horizontal
+    merges honoured via colspan. (Italic is skipped — the bundled Unicode
+    family ships no italic face.)"""
+    from fpdf import FPDF
+    from fpdf.fonts import FontFace
+    from openpyxl import load_workbook
+    from openpyxl.utils import get_column_letter
+
+    wb = load_workbook(io.BytesIO(data), data_only=True)
+    pdf = FPDF(orientation="L", unit="pt", format="a4")
+    pdf.set_auto_page_break(True, margin=32)
+    pdf.uni_family = _register_fonts(pdf)
+    face = _face(pdf)
+
+    rendered = 0
+    for ws in wb.worksheets:
+        nrows = min(ws.max_row or 0, 3000)
+        ncols = min(ws.max_column or 0, 60)
+        if not nrows or not ncols or (nrows == 1 and ncols == 1 and ws.cell(1, 1).value is None):
+            continue
+        rendered += 1
+
+        pdf.add_page()
+        pdf.set_font(face, "B", 12)
+        pdf.set_text_color(74, 56, 34)
+        pdf.cell(0, 16, _txt(pdf, ws.title), new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(6)
+        pdf.set_font(face, size=8)
+        pdf.set_text_color(20, 20, 20)
+
+        h_merge = {}  # (row, col) → colspan for single-row merges
+        for rng in ws.merged_cells.ranges:
+            if rng.min_row == rng.max_row and rng.max_col > rng.min_col:
+                h_merge[(rng.min_row, rng.min_col)] = min(rng.max_col, ncols) - rng.min_col + 1
+
+        widths = []
+        for ci in range(1, ncols + 1):
+            dim = ws.column_dimensions.get(get_column_letter(ci))
+            w = dim.width if dim is not None and dim.width else 10.5
+            widths.append(max(4.0, min(40.0, float(w))))  # relative proportions
+
+        with pdf.table(col_widths=tuple(widths), first_row_as_headings=False,
+                       line_height=11) as table:
+            for ri in range(1, nrows + 1):
+                trow = table.row()
+                ci = 1
+                while ci <= ncols:
+                    cell = ws.cell(ri, ci)
+                    span = h_merge.get((ri, ci), 1)
+                    style = FontFace(
+                        emphasis="BOLD" if (cell.font is not None and cell.font.b) else None,
+                        color=_argb(cell.font.color) if cell.font is not None else None,
+                        fill_color=_argb(cell.fill.fgColor)
+                        if cell.fill is not None and cell.fill.patternType == "solid" else None,
+                    )
+                    halign = (cell.alignment.horizontal or "LEFT").upper() \
+                        if cell.alignment is not None and cell.alignment.horizontal in ("center", "right") else "LEFT"
+                    trow.cell(_txt(pdf, _cellstr(cell.value)), colspan=span,
+                              style=style, align=halign)
+                    ci += span
+
+    if not rendered:
+        raise ValueError("The workbook has no visible content.")
+    return bytes(pdf.output())
+
+
 def table_to_pdf(data: bytes, is_csv: bool) -> bytes:
+    if not is_csv:
+        return _xlsx_to_pdf(data)
     from fpdf import FPDF
 
-    rows = _rows_from_csv(data) if is_csv else _rows_from_xlsx(data)
+    rows = _rows_from_csv(data)
     rows = [r for r in rows if any(str(c).strip() for c in r)] or [["(empty file)"]]
     ncols = max(len(r) for r in rows)
 
