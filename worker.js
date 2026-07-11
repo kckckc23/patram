@@ -105,6 +105,10 @@ self.onmessage = async (e) => {
     const eng = requiredEngine(action, params || {});
     if (eng) { await ensureEngine(eng, note); note("engine ready — working…"); }
 
+    // stream Python-side per-page progress (pdf2docx etc.) onto the run button
+    pyodide.globals.set("_js_progress", (m) => note(String(m)));
+    pyodide.runPython("set_progress(_js_progress)");
+
     (files || []).forEach((buf, i) => pyodide.FS.writeFile("/in" + i, new Uint8Array(buf)));
 
     const p = { ...(params || {}), n: (files || []).length };
@@ -121,6 +125,8 @@ self.onmessage = async (e) => {
     }
   } catch (err) {
     post("error", { id, msg: humanize(String(err)) });
+  } finally {
+    try { pyodide.runPython("set_progress(None)"); } catch {}
   }
 };
 

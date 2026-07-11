@@ -120,15 +120,23 @@ conversion: the x2t.wasm fidelity engine, the sdkjs print pipeline, local-font c
 
 - Office→PDF conversions currently preserve **text, headings, tables and structure**,
   not pixel-perfect layout — the fidelity-engine tiers in `plan.md` are how that
-  changes.
+  changes. Word→PDF additionally offers a **print view** (docx→HTML via mammoth →
+  your browser's own print engine) that keeps bold/lists/tables/images; choose
+  "Save as PDF" in the dialog.
+- PDF→PowerPoint's default mode renders each page as a full-slide image —
+  pixel-faithful but not editable; an editable text-extraction mode is offered
+  alongside.
 - PDF→Word is layout-aware (pdf2docx tier): flowing paragraphs, ruled tables and
   images reconstruct well; borderless tables, dense multi-column layouts and scanned
   pages (run OCR first) do not.
 - Complex-script *shaping* (Devanagari conjuncts, Arabic) in generated PDFs is
   approximate until a HarfBuzz-class shaper lands; characters are correct, ligature
   forms may not be.
-- On Safari, cached engines are purged after ~7 days without a visit (WebKit storage
-  policy) — the affected tool simply re-downloads its engine on next use.
+- Offline is real but has edges: a **hard refresh** (Ctrl+Shift+R) deliberately
+  bypasses the cache and re-downloads; OCR still needs the network (tesseract's
+  internal loader defeats caching); heavy engines are cached only after their
+  first use. On Safari, cached engines are purged after ~7 days without a visit
+  (WebKit storage policy) — the affected tool simply re-downloads on next use.
 - Heavy tools are desktop-grade: PDF→Word needs several hundred MB of memory and is
   gated accordingly on low-memory devices.
 

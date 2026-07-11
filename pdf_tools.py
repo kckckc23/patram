@@ -12,8 +12,32 @@ Pyodide virtual FS at /in0, /in1, ... and binary results are written to /out.
 import io
 import csv
 import json
+import logging
 
 from pypdf import PdfReader, PdfWriter
+
+# ---- progress streaming ----------------------------------------------------
+# The worker installs a JS callback via set_progress(); long-running engines
+# (pdf2docx logs one line per page) then stream real progress to the UI.
+_PROGRESS = None
+
+
+def set_progress(cb) -> None:
+    global _PROGRESS
+    _PROGRESS = cb
+
+
+class _ProgressHandler(logging.Handler):
+    def emit(self, record):
+        if _PROGRESS is not None:
+            try:
+                _PROGRESS(record.getMessage()[:90])
+            except Exception:
+                pass
+
+
+logging.getLogger().addHandler(_ProgressHandler())
+logging.getLogger().setLevel(logging.INFO)
 
 
 # --------------------------------------------------------------------------- #
@@ -340,16 +364,23 @@ def word_to_pdf(data: bytes) -> bytes:
     return bytes(pdf.output())
 
 
-def pdf_to_word_hifi(data: bytes) -> bytes:
+def pdf_to_word_hifi(data: bytes, start: int = 0, end: int = 0) -> bytes:
     """Layout-aware PDF→DOCX via pdf2docx: flowing paragraphs, ruled tables,
-    images. The worker installs the engine on first use."""
+    images. The worker installs the engine on first use. start/end are
+    1-based inclusive page numbers (0 = from first / to last) — converting a
+    range is the practical answer for very large documents."""
     from pdf2docx import Converter
 
     with open("/hifi.pdf", "wb") as fh:
         fh.write(data)
+    kwargs = {}
+    if start:
+        kwargs["start"] = int(start) - 1   # pdf2docx: 0-based inclusive
+    if end:
+        kwargs["end"] = int(end)           # pdf2docx: 0-based exclusive
     cv = Converter("/hifi.pdf")
     try:
-        cv.convert("/hifi.docx")
+        cv.convert("/hifi.docx", **kwargs)
     finally:
         cv.close()
     with open("/hifi.docx", "rb") as fh:
@@ -408,16 +439,32 @@ def pdf_to_word(data: bytes) -> bytes:
 # --------------------------------------------------------------------------- #
 # PowerPoint (python-pptx) <-> PDF
 # --------------------------------------------------------------------------- #
+def _shape_texts(shape, parts):
+    """Collect text from a shape, recursing into groups and reading tables —
+    designed decks keep most of their words in exactly those two places."""
+    from pptx.enum.shapes import MSO_SHAPE_TYPE
+
+    if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+        for sub in shape.shapes:
+            _shape_texts(sub, parts)
+        return
+    if shape.has_text_frame:
+        for para in shape.text_frame.paragraphs:
+            if para.text.strip():
+                parts.append(para.text)
+    if getattr(shape, "has_table", False):
+        for row in shape.table.rows:
+            cells = [c.text.strip() for c in row.cells]
+            if any(cells):
+                parts.append("  ·  ".join(c for c in cells if c))
+
+
 def _slide_texts(prs):
     slides = []
     for slide in prs.slides:
         parts = []
         for shape in slide.shapes:
-            if shape.has_text_frame:
-                for para in shape.text_frame.paragraphs:
-                    line = "".join(run.text for run in para.runs)
-                    if line.strip():
-                        parts.append(line)
+            _shape_texts(shape, parts)
         slides.append(parts)
     return slides
 
@@ -426,9 +473,14 @@ def ppt_to_pdf(data: bytes) -> bytes:
     from pptx import Presentation
 
     prs = Presentation(io.BytesIO(data))
+    texts = _slide_texts(prs)
+    if not any(texts):
+        raise ValueError("No extractable text in this presentation — its slides "
+                         "appear to be images or artwork. The current converter "
+                         "re-lays text only; a pixel-faithful one is on the roadmap.")
     pdf = _new_pdf(orientation="L", fmt="a4")
     face = _face(pdf)
-    for parts in _slide_texts(prs):
+    for parts in texts:
         pdf.add_page()
         title = parts[0] if parts else "Slide"
         body = parts[1:] if len(parts) > 1 else []
@@ -469,6 +521,30 @@ def pdf_to_ppt(data: bytes) -> bytes:
                 p = tf.add_paragraph()
                 p.text = line
                 p.font.size = Pt(12)
+    out = io.BytesIO()
+    prs.save(out)
+    return out.getvalue()
+
+
+def images_to_ppt(paths, w_pt: float = 0, h_pt: float = 0) -> bytes:
+    """Faithful PDF→PPTX: each pre-rendered page image becomes a full-bleed
+    slide picture. Visually exact; the text is not editable — that trade is
+    stated in the UI."""
+    from pptx import Presentation
+    from pptx.util import Emu
+
+    EMU_PER_PT = 12700
+    prs = Presentation()
+    if w_pt and h_pt:
+        prs.slide_width = Emu(int(w_pt * EMU_PER_PT))
+        prs.slide_height = Emu(int(h_pt * EMU_PER_PT))
+    blank = prs.slide_layouts[6]
+    for path in paths:
+        slide = prs.slides.add_slide(blank)
+        slide.shapes.add_picture(path, 0, 0,
+                                 width=prs.slide_width, height=prs.slide_height)
+    if not prs.slides:
+        prs.slides.add_slide(blank)
     out = io.BytesIO()
     prs.save(out)
     return out.getvalue()
@@ -541,7 +617,8 @@ def dispatch(action: str, params_json: str = "") -> str:
     elif action == "wordToPdf":
         out = word_to_pdf(files[0])
     elif action == "pdfToWord":
-        out = pdf_to_word_hifi(files[0]) if p.get("engine") == "hifi" else pdf_to_word(files[0])
+        out = (pdf_to_word_hifi(files[0], int(p.get("start", 0)), int(p.get("end", 0)))
+               if p.get("engine") == "hifi" else pdf_to_word(files[0]))
     elif action == "pptToPdf":
         out = ppt_to_pdf(files[0])
     elif action == "pdfToPpt":
@@ -552,6 +629,12 @@ def dispatch(action: str, params_json: str = "") -> str:
                 f.write(data)
         out = images_to_pdf([f"/img{i}" for i in range(len(files))],
                             p.get("size", "letter"))
+    elif action == "imagesToPpt":
+        for i, data in enumerate(files):
+            with open(f"/img{i}", "wb") as f:
+                f.write(data)
+        out = images_to_ppt([f"/img{i}" for i in range(len(files))],
+                            float(p.get("w", 0)), float(p.get("h", 0)))
     else:
         raise ValueError(f"Unknown action: {action}")
 
