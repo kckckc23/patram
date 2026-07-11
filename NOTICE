@@ -23,6 +23,8 @@ Runtime engines (CDN-loaded, executed in the browser)
 - pdf.js (pdfjs-dist) — Apache-2.0 — https://github.com/mozilla/pdf.js
 - tesseract.js — Apache-2.0 — https://github.com/naptha/tesseract.js
 - JSZip — MIT/GPLv3 dual — https://github.com/Stuk/jszip
+- mammoth.js (docx→HTML for the print view) — BSD-2-Clause
+  https://github.com/mwilliamson/mammoth.js
 - qpdf, compiled to WebAssembly — Apache-2.0
   qpdf: https://github.com/qpdf/qpdf
   WASM build (@neslinesli93/qpdf-wasm, ISC wrapper): https://github.com/neslinesli93/qpdf-wasm
