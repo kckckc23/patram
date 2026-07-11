@@ -7,15 +7,16 @@
  * responses are stored (opaque responses are quota-padded and unusable under
  * a future cross-origin-isolated deployment).
  */
-const VERSION = "patram-sw-v3";
+const VERSION = "patram-sw-v4";
 const CORE = [
-  "./", "./index.html", "./styles.css", "./app.js",
+  "./", "./index.html", "./styles.css", "./app.js", "./favicon.svg",
   "./worker.js", "./qpdf-worker.js", "./pdf_tools.py", "./fonts/manifest.json",
 ];
 const ENGINE_HOSTS = new Set([
-  "cdn.jsdelivr.net",          // pyodide, pdf.js, tesseract.js, jszip, qpdf
+  "cdn.jsdelivr.net",          // pyodide, pdf.js, tesseract.js, jszip, qpdf, mammoth
   "files.pythonhosted.org",    // wheels fetched by micropip
   "pypi.org",                  // micropip metadata (cached → offline installs)
+  "tessdata.projectnaptha.com",// OCR language data
   "fonts.googleapis.com", "fonts.gstatic.com",
 ]);
 
