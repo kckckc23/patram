@@ -13,7 +13,11 @@ const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox", 
 const page = await browser.newPage();
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e)));
-page.on("console", (m) => { if (m.type() === "error") errors.push("console: " + m.text()); });
+page.on("console", (m) => {
+  // /_vercel/insights 404s until Web Analytics is enabled on the Vercel project — not an app error
+  if (m.type() === "error" && !m.location()?.url?.includes("_vercel/insights"))
+    errors.push("console: " + m.text());
+});
 
 console.log("\x1b[1mLoading page + booting engine…\x1b[0m");
 await page.goto("http://localhost:8231/index.html", { waitUntil: "domcontentloaded" });
