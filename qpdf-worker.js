@@ -7,7 +7,19 @@
  * qpdf is a one-shot CLI by design. Files never leave this device.
  */
 const PKG = "https://cdn.jsdelivr.net/npm/@neslinesli93/qpdf-wasm@0.3.0/dist/";
-importScripts(PKG + "qpdf.js"); // UMD build → global `Module` factory
+// The UMD glue is loaded via a cors fetch + indirect eval instead of
+// importScripts: cors responses are what the service worker can cache, so the
+// tool keeps working offline after its first use.
+let glueReady = null;
+function ensureGlue() {
+  if (!glueReady) {
+    glueReady = fetch(PKG + "qpdf.js", { mode: "cors" })
+      .then((r) => { if (!r.ok) throw new Error("qpdf download failed (" + r.status + ")"); return r.text(); })
+      .then((src) => { (0, eval)(src); /* defines global `Module` factory */ })
+      .catch((e) => { glueReady = null; throw e; });
+  }
+  return glueReady;
+}
 
 const OPS = {
   linearize: () => ["--linearize"],
@@ -25,6 +37,7 @@ const OPS = {
 async function runQpdf(op, params, bytes) {
   const build = OPS[op];
   if (!build) throw new Error("Unknown operation: " + op);
+  await ensureGlue();
   const stderr = [];
   const m = await Module({
     locateFile: () => PKG + "qpdf.wasm",
