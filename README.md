@@ -34,7 +34,8 @@ sw.js  ← service worker: shell network-first, engines cache-first → real off
 - **Core Python tools** (`pdf_tools.py`, run in `worker.js`): merge, split (single
   range, every-N, or several ranges → zip), delete, organize & rotate, compress,
   stamp/watermark/page numbers, strip metadata, PDF↔Text, images→PDF, Word↔PDF,
-  Excel/CSV↔PDF, PowerPoint↔PDF.
+  Excel/CSV↔PDF (styled: fills, bold, merges, one page per sheet), PowerPoint↔PDF.
+  Compress and the converters accept **many files at once** and return a zip.
 - **High-fidelity tools** (engines fetched on first use, with a size disclosure, then
   cached for offline): PDF→Word rebuilds flowing text/tables/images via **pdf2docx**
   (~33 MB); PDF→Excel detects real tables via **pdfplumber** (~8 MB); Compress
