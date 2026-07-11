@@ -474,6 +474,30 @@ def pdf_to_ppt(data: bytes) -> bytes:
     return out.getvalue()
 
 
+def images_to_ppt(paths, w_pt: float = 0, h_pt: float = 0) -> bytes:
+    """Faithful PDF→PPTX: each pre-rendered page image becomes a full-bleed
+    slide picture. Visually exact; the text is not editable — that trade is
+    stated in the UI."""
+    from pptx import Presentation
+    from pptx.util import Emu
+
+    EMU_PER_PT = 12700
+    prs = Presentation()
+    if w_pt and h_pt:
+        prs.slide_width = Emu(int(w_pt * EMU_PER_PT))
+        prs.slide_height = Emu(int(h_pt * EMU_PER_PT))
+    blank = prs.slide_layouts[6]
+    for path in paths:
+        slide = prs.slides.add_slide(blank)
+        slide.shapes.add_picture(path, 0, 0,
+                                 width=prs.slide_width, height=prs.slide_height)
+    if not prs.slides:
+        prs.slides.add_slide(blank)
+    out = io.BytesIO()
+    prs.save(out)
+    return out.getvalue()
+
+
 # --------------------------------------------------------------------------- #
 # images -> PDF (Pillow + fpdf2)
 # --------------------------------------------------------------------------- #
@@ -552,6 +576,12 @@ def dispatch(action: str, params_json: str = "") -> str:
                 f.write(data)
         out = images_to_pdf([f"/img{i}" for i in range(len(files))],
                             p.get("size", "letter"))
+    elif action == "imagesToPpt":
+        for i, data in enumerate(files):
+            with open(f"/img{i}", "wb") as f:
+                f.write(data)
+        out = images_to_ppt([f"/img{i}" for i in range(len(files))],
+                            float(p.get("w", 0)), float(p.get("h", 0)))
     else:
         raise ValueError(f"Unknown action: {action}")
 
