@@ -212,6 +212,40 @@ ok(`decrypt → ${validPdf(r, "decrypt")} pages`);
 r = await qpdf([], f.pdf);
 ok(`repair pass → ${validPdf(r, "repair")} pages`);
 
+// ---- overlays, privacy, zip splitting --------------------------------------
+step("Stamp / strip metadata / split-zip / OCR overlay…");
+r = run("stamp", { text: "CONFIDENTIAL", pos: "diagonal", pagenum: true }, [f.pdf]);
+ok(`stamp + page numbers → ${validPdf(r, "stamp")} pages`);
+
+r = run("stripMeta", {}, [f.pdf]);
+py.FS.writeFile("/o4.pdf", r);
+validPdf(r, "stripMeta");
+const infoLeft = py.runPython(`from pypdf import PdfReader
+m = PdfReader("/o4.pdf").metadata
+0 if not m else len([v for v in m.values() if v])`);
+ok(`strip metadata → valid pdf, ${infoLeft} info entries left`);
+
+r = run("splitZip", { mode: "every", n: 2 }, [f.pdf]);
+py.FS.writeFile("/o5.zip", r);
+let znames = py.runPython(`import zipfile; ", ".join(zipfile.ZipFile("/o5.zip").namelist())`);
+ok(`split every 2 pages → zip [${znames}]`);
+
+r = run("splitZip", { mode: "ranges", spec: "1-2, 4" }, [f.pdf]);
+py.FS.writeFile("/o5b.zip", r);
+znames = py.runPython(`import zipfile; ", ".join(zipfile.ZipFile("/o5b.zip").namelist())`);
+ok(`split ranges "1-2, 4" → zip [${znames}]`);
+
+r = run("ocrOverlay", { pages: [{ scale: 2, words: [
+  { t: "hello", x0: 100, y0: 100, x1: 320, y1: 148 },
+  { t: "पत्रम्", x0: 100, y0: 200, x1: 320, y1: 248 },
+] }] }, [f.pdf]);
+py.FS.writeFile("/o6.pdf", r);
+validPdf(r, "ocrOverlay");
+const hasWord = py.runPython(`from pypdf import PdfReader
+"hello" in (PdfReader("/o6.pdf").pages[0].extract_text() or "")`);
+if (!hasWord) throw new Error("OCR overlay text is not extractable");
+ok(`OCR overlay → searchable pdf (invisible word layer extracts back)`);
+
 // ---- heavy engines (run with --full; downloads ~40MB of wheels once) ------
 if (process.argv.includes("--full")) {
   step("Heavy engines (--full): PyMuPDF, pdf2docx, pdfplumber…");

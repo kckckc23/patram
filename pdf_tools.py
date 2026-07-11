@@ -13,6 +13,7 @@ import io
 import csv
 import json
 import logging
+import re
 
 from pypdf import PdfReader, PdfWriter
 
@@ -27,11 +28,14 @@ def set_progress(cb) -> None:
     _PROGRESS = cb
 
 
+_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")  # pdf2docx colors its log lines
+
+
 class _ProgressHandler(logging.Handler):
     def emit(self, record):
         if _PROGRESS is not None:
             try:
-                _PROGRESS(record.getMessage()[:90])
+                _PROGRESS(_ANSI.sub("", record.getMessage())[:90])
             except Exception:
                 pass
 
@@ -209,6 +213,144 @@ def compress_pdf(data: bytes, image_quality: int = 60) -> bytes:
         pass
 
     return _save(writer)
+
+
+# --------------------------------------------------------------------------- #
+# overlays: watermark / page numbers / invisible OCR text (fpdf2 + pypdf)
+# --------------------------------------------------------------------------- #
+def _overlay_merge(data: bytes, draw) -> bytes:
+    """Draw per-page content with fpdf2 and merge it on top of the original
+    pages. draw(ov, i, w, h) gets the overlay canvas and the page size in pt."""
+    from fpdf import FPDF
+
+    reader = _reader(data)
+    ov = FPDF(unit="pt")
+    ov.set_auto_page_break(False)
+    ov.uni_family = _register_fonts(ov)
+    for page in reader.pages:
+        w, h = float(page.mediabox.width), float(page.mediabox.height)
+        ov.add_page(format=(w, h))
+        draw(ov, ov.page - 1, w, h)
+    ov_reader = _reader(bytes(ov.output()))
+    writer = PdfWriter()
+    for i, page in enumerate(reader.pages):
+        page.merge_page(ov_reader.pages[i])
+        writer.add_page(page)
+    return _save(writer)
+
+
+def stamp_pdf(data: bytes, text: str = "", pos: str = "diagonal",
+              pagenum: bool = False) -> bytes:
+    """Watermark / header / footer text, and/or 'Page i of N' numbers."""
+    if not text.strip() and not pagenum:
+        raise ValueError("Add stamp text or turn on page numbers.")
+    total = get_page_count(data)
+
+    def draw(ov, i, w, h):
+        face = _face(ov)
+        if text.strip():
+            t = _txt(ov, text.strip())
+            if pos == "diagonal":
+                ov.set_font(face, "B", max(24, min(w, h) / 8))
+                ov.set_text_color(203, 178, 130)
+                with ov.rotation(45, w / 2, h / 2):
+                    ov.text((w - ov.get_string_width(t)) / 2, h / 2, t)
+            else:
+                ov.set_font(face, "", 9)
+                ov.set_text_color(122, 110, 92)
+                y = 24 if pos == "header" else h - 16
+                ov.text((w - ov.get_string_width(t)) / 2, y, t)
+        if pagenum:
+            ov.set_font(face, "", 9)
+            ov.set_text_color(122, 110, 92)
+            label = f"Page {i + 1} of {total}"
+            ov.text(w - ov.get_string_width(label) - 28, h - 16, label)
+
+    return _overlay_merge(data, draw)
+
+
+def ocr_overlay(data: bytes, pages) -> bytes:
+    """Lay recognized words invisibly over each page → a searchable PDF that
+    still looks exactly like the scan. pages: [{scale, words: [{t, x0, y0,
+    x1, y1}]}] with word boxes in canvas pixels at the given render scale."""
+    def draw(ov, i, w, h):
+        if i >= len(pages):
+            return
+        s = float(pages[i].get("scale") or 1) or 1
+        words = pages[i].get("words") or []
+        if not words:
+            return
+        face = _face(ov)
+        try:
+            from fpdf.enums import TextMode
+            ov.text_mode = TextMode.INVISIBLE
+        except Exception:
+            ov.set_text_color(255, 255, 255)
+        for wd in words:
+            t = str(wd.get("t", "")).strip()
+            if not t:
+                continue
+            x0, y0, y1 = wd["x0"] / s, wd["y0"] / s, wd["y1"] / s
+            size = max(4.0, (y1 - y0) * 0.92)
+            ov.set_font(face, "", size)
+            ov.text(x0, y1 - size * 0.22, _txt(ov, t))
+
+    return _overlay_merge(data, draw)
+
+
+def strip_metadata(data: bytes) -> bytes:
+    """A privacy pass: drop the document info dictionary and XMP metadata."""
+    reader = _reader(data)
+    writer = PdfWriter()
+    writer.append(reader)
+    try:
+        writer.metadata = None
+    except Exception:
+        writer.add_metadata({})
+    try:
+        root = writer._root_object
+        if "/Metadata" in root:
+            del root["/Metadata"]
+    except Exception:
+        pass
+    return _save(writer)
+
+
+def split_zip(data: bytes, mode: str = "every", n: int = 0, spec: str = "") -> bytes:
+    """Split into several PDFs delivered as one zip: every N pages, or a list
+    of ranges ('1-3, 7, 9-12' → one PDF per comma-separated chunk)."""
+    import zipfile
+
+    reader = _reader(data)
+    total = len(reader.pages)
+    parts = []
+    if mode == "every":
+        n = max(1, int(n))
+        for s in range(0, total, n):
+            e = min(s + n, total)
+            parts.append((f"pages_{s + 1:03d}-{e:03d}", range(s, e)))
+    else:
+        for chunk in (spec or "").split(","):
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            pages = parse_page_ranges(chunk, total)
+            if pages:
+                parts.append((f"pages_{chunk.replace(' ', '').replace('-', '_')}",
+                              [p - 1 for p in pages]))
+        if not parts:
+            raise ValueError("Enter ranges like 1-3, 7, 9-12.")
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, idxs in parts:
+            w = PdfWriter()
+            for i in idxs:
+                w.add_page(reader.pages[i])
+            b = io.BytesIO()
+            w.write(b)
+            z.writestr(name + ".pdf", b.getvalue())
+    return buf.getvalue()
 
 
 def compress_pdf_max(data: bytes, dpi: int = 110, quality: int = 60) -> bytes:
@@ -602,6 +744,16 @@ def dispatch(action: str, params_json: str = "") -> str:
         out = delete_pages(files[0], p["ranges"])
     elif action == "organize":
         out = organize_pdf(files[0], p["order"])
+    elif action == "stamp":
+        out = stamp_pdf(files[0], p.get("text", ""), p.get("pos", "diagonal"),
+                        bool(p.get("pagenum")))
+    elif action == "stripMeta":
+        out = strip_metadata(files[0])
+    elif action == "splitZip":
+        out = split_zip(files[0], p.get("mode", "every"), int(p.get("n", 0)),
+                        p.get("spec", ""))
+    elif action == "ocrOverlay":
+        out = ocr_overlay(files[0], p.get("pages") or [])
     elif action == "compress":
         if p.get("mode") == "max":
             out = compress_pdf_max(files[0], int(p.get("dpi", 110)),
