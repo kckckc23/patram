@@ -224,6 +224,11 @@ h1, h2, h3 { margin: 0; font-family: var(--display); font-weight: 400; letter-sp
 .tool-head .badge.local { color: var(--mehendi); background: var(--mehendi-wash); border-color: #bcd190; }
 
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-items: start; }
+/* grid items default to min-width:auto — one long unbreakable filename made the
+   column wider than a phone viewport and pushed the whole workbench off-screen */
+.grid2 > * { min-width: 0; }
+.run { max-width: 100%; }
+.run span { overflow-wrap: anywhere; }
 @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
 
 /* dropzone */
