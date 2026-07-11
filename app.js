@@ -81,7 +81,7 @@ function pushBoot(msg, done) {
   if (box) renderBoot(box);
 }
 
-const worker = new Worker("./worker.js");
+const worker = new Worker("./worker.js", { type: "module" }); // Pyodide 314 is ESM-only
 let reqId = 0;
 const pending = new Map();
 worker.onmessage = (e) => {

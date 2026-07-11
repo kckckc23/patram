@@ -9,12 +9,15 @@
  */
 const PYODIDE_VERSION = "314.0.2";
 const BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
-importScripts(BASE + "pyodide.js");
+// Pyodide 314 dropped classic-worker support ("Classic web workers are not
+// supported") — this file must run as a MODULE worker (see app.js) and load
+// the ESM build via dynamic import.
 
 let pyodide = null;
 
 async function boot() {
   post("boot", { phase: "runtime", msg: "Fetching Python runtime (WebAssembly)…" });
+  const { loadPyodide } = await import(BASE + "pyodide.mjs");
   pyodide = await loadPyodide({ indexURL: BASE });
 
   post("boot", { phase: "packages", msg: "Loading Pillow + lxml…" });
