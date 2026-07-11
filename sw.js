@@ -7,7 +7,7 @@
  * responses are stored (opaque responses are quota-padded and unusable under
  * a future cross-origin-isolated deployment).
  */
-const VERSION = "patram-sw-v1";
+const VERSION = "patram-sw-v3";
 const CORE = [
   "./", "./index.html", "./styles.css", "./app.js",
   "./worker.js", "./qpdf-worker.js", "./pdf_tools.py", "./fonts/manifest.json",
@@ -40,17 +40,21 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(req.url);
   const sameOrigin = url.origin === self.location.origin;
   if (!sameOrigin && !ENGINE_HOSTS.has(url.hostname)) return;
+  // NEVER intercept cross-origin non-cors loads (importScripts, plain <script>):
+  // Chrome rejects SW-served responses for those and the engine boot bricks.
+  // Left un-intercepted they behave exactly as before this SW existed.
+  if (!sameOrigin && req.mode !== "cors") return;
 
   const isEngineAsset = !sameOrigin || url.pathname.includes("/fonts/");
   e.respondWith(isEngineAsset ? cacheFirst(req) : networkFirst(req));
 });
 
 async function cacheFirst(req) {
-  const hit = await caches.match(req);
+  const hit = await caches.match(req.url);
   if (hit) return hit;
   const res = await fetch(req);
   if (res && res.ok && res.type !== "opaque") {
-    (await caches.open(VERSION)).put(req, res.clone());
+    (await caches.open(VERSION)).put(req.url, res.clone());
   }
   return res;
 }
