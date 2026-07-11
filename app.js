@@ -207,6 +207,10 @@ const TOOLS = [
   { id: "organize", name: "Organize & rotate", badge: "PYTHON",
     desc: "Reorder, rotate, or drop pages, then rebuild the PDF.",
     engine: "organize" },
+  { id: "stamp", name: "Stamp & page numbers", badge: "PYTHON",
+    desc: "Add a watermark, header/footer text, or page numbers.",
+    keys: "watermark confidential draft header footer number stamp",
+    engine: "stamp" },
 
   { group: "Optimize" },
   { id: "compress", name: "Compress PDF", badge: "PYTHON",
@@ -226,6 +230,10 @@ const TOOLS = [
   { id: "repair", name: "Repair PDF", badge: "QPDF",
     desc: "Rebuild a damaged file's structure (cross-reference recovery).",
     engine: "qpdf", qpdf: "repair", accept: ".pdf", suffix: "_repaired" },
+  { id: "metaStrip", name: "Strip metadata", badge: "PYTHON",
+    desc: "Remove author, title, software traces and XMP data from a PDF.",
+    keys: "privacy metadata author anonymize clean hidden",
+    engine: "convert", action: "stripMeta", accept: ".pdf", out: "pdf", suffix: "_clean" },
 
   { group: "Extract" },
   { id: "pdfText", name: "PDF → Text", badge: "PYTHON",
@@ -482,6 +490,57 @@ ENGINES.convert = (tool, root) => {
          browser's own print engine — pick “Save as PDF” in the dialog. Still fully on-device.`));
     }
     if (firstUse()) left.appendChild(engineHint(tool.heavy));
+    if (tool.heavy && navigator.deviceMemory && navigator.deviceMemory <= 2)
+      left.appendChild(el("p", { class: "engine-hint" },
+        `${I.alert} This device reports limited memory — very large files may fail here.`));
+  }
+  renderLeft();
+  grid.append(left, right); root.appendChild(grid);
+};
+
+/* stamp & page numbers */
+ENGINES.stamp = (tool, root) => {
+  const grid = el("div", { class: "grid2" });
+  const left = el("div"), right = outColumn("Result");
+  right.body.appendChild(placeholder("Nothing yet", "Load a PDF, choose a stamp, and apply."));
+  let file = null, pos = "diagonal";
+  const dz = dropzone({ accept: ".pdf", label: "Drop a PDF or click to browse",
+    onFiles: (f) => { file = f[0]; renderLeft(); } });
+  const textI = el("input", { class: "input", type: "text", placeholder: "e.g. CONFIDENTIAL · empty = numbers only" });
+  const numC = el("input", { type: "checkbox", id: "pgnum" });
+  const btn = runButton("Apply stamp");
+  btn.addEventListener("click", async () => {
+    if (!file) return;
+    try {
+      await withBusy(btn, "Stamping…", async () => {
+        const res = await callEngine("stamp", { text: textI.value, pos, pagenum: numC.checked },
+          [await readBuf(file)], (msg) => btn.setBusy(true, msg));
+        right.body.innerHTML = "";
+        right.body.appendChild(resultCard({ bytes: res.bytes, name: `${stem(file.name)}_stamped.pdf`, mime: MIME.pdf,
+          stats: [["Output", fmtBytes(res.bytes.byteLength)]] }));
+      });
+    } catch (err) { showError(right.body, err); }
+  });
+  function renderLeft() {
+    left.innerHTML = ""; left.appendChild(dz);
+    if (!file) return;
+    const files = el("div", { class: "files" });
+    files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } }));
+    left.appendChild(files);
+    const f1 = el("div", { class: "field" }, `<label>Stamp text</label>`);
+    f1.appendChild(textI); left.appendChild(f1);
+    const f2 = el("div", { class: "field" }, `<label>Placement</label>`);
+    const sel = el("select", { class: "input", onchange: (e) => pos = e.target.value },
+      `<option value="diagonal">Diagonal watermark</option>
+       <option value="header">Header (top, small)</option>
+       <option value="footer">Footer (bottom, small)</option>`);
+    sel.value = pos;
+    f2.appendChild(sel); left.appendChild(f2);
+    const f3 = el("label", { class: "engine-hint", for: "pgnum", style: "cursor:pointer" });
+    f3.appendChild(numC);
+    f3.appendChild(document.createTextNode(" Add “Page x of y” to every page"));
+    left.appendChild(f3);
+    left.appendChild(btn);
   }
   renderLeft();
   grid.append(left, right); root.appendChild(grid);
@@ -651,42 +710,70 @@ ENGINES.merge = (tool, root) => {
   grid.append(left, right); root.appendChild(grid);
 };
 
-/* split: range with page count */
+/* split: single range, every-N-pages, or several ranges → zip */
 ENGINES.range = (tool, root) => {
   const grid = el("div", { class: "grid2" });
   const left = el("div"), right = outColumn("Result");
-  right.body.appendChild(placeholder("Nothing yet", "Load a PDF and choose a page range."));
-  let file = null, pages = 0;
+  right.body.appendChild(placeholder("Nothing yet", "Load a PDF and choose how to split it."));
+  let file = null, pages = 0, mode = "single";
   const dz = dropzone({ accept: ".pdf", label: "Drop a PDF or click to browse",
     onFiles: async (f) => { file = f[0]; pages = 0; renderLeft();
       try { const r = await callEngine("pageCount", {}, [await readBuf(file)]); pages = r.data.pages; renderLeft(); } catch {} } });
   const startI = el("input", { type: "number", min: "1", value: "1" });
   const endI = el("input", { type: "number", min: "1", value: "1" });
-  const btn = runButton("Extract range");
+  const everyI = el("input", { class: "input mono", type: "number", min: "1", value: "10" });
+  const rangesI = el("input", { class: "input mono", type: "text", placeholder: "e.g. 1-3, 7, 9-12" });
+  const btn = runButton("Split PDF");
   btn.addEventListener("click", async () => {
     if (!file) return;
-    const s = +startI.value, e = +endI.value;
     try {
-      await withBusy(btn, "Extracting…", async () => {
-        const res = await callEngine("split", { start: s, end: e }, [await readBuf(file)]);
+      await withBusy(btn, "Splitting…", async () => {
+        let res, name, mime = MIME.pdf, stats;
+        if (mode === "single") {
+          const s = +startI.value, e = +endI.value;
+          res = await callEngine("split", { start: s, end: e }, [await readBuf(file)]);
+          name = `${stem(file.name)}_p${s}-${e}.pdf`;
+          stats = [["Pages", `${s}–${e}`], ["Output", fmtBytes(res.bytes.byteLength)]];
+        } else if (mode === "every") {
+          res = await callEngine("splitZip", { mode: "every", n: +everyI.value }, [await readBuf(file)]);
+          name = `${stem(file.name)}_split.zip`; mime = MIME.zip;
+          stats = [["Chunk", everyI.value + " pages"], ["Output", fmtBytes(res.bytes.byteLength)]];
+        } else {
+          res = await callEngine("splitZip", { mode: "ranges", spec: rangesI.value }, [await readBuf(file)]);
+          name = `${stem(file.name)}_split.zip`; mime = MIME.zip;
+          stats = [["Output", fmtBytes(res.bytes.byteLength)]];
+        }
         right.body.innerHTML = "";
-        right.body.appendChild(resultCard({ bytes: res.bytes, name: `${stem(file.name)}_p${s}-${e}.pdf`, mime: MIME.pdf,
-          stats: [["Pages", `${s}–${e}`], ["Output", fmtBytes(res.bytes.byteLength)]] }));
+        right.body.appendChild(resultCard({ bytes: res.bytes, name, mime, stats }));
       });
     } catch (err) { showError(right.body, err); }
   });
   function renderLeft() {
     left.innerHTML = ""; left.appendChild(dz);
-    if (file) {
-      const files = el("div", { class: "files" });
-      files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } }));
-      left.appendChild(files);
-      const field = el("div", { class: "field" }, `<label>Page range${pages ? ` · ${pages} pages total` : ""}</label>`);
+    if (!file) return;
+    const files = el("div", { class: "files" });
+    files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } }));
+    left.appendChild(files);
+    const fm = el("div", { class: "field" }, `<label>Split mode${pages ? ` · ${pages} pages total` : ""}</label>`);
+    const sel = el("select", { class: "input", onchange: (e) => { mode = e.target.value; renderLeft(); } },
+      `<option value="single">Keep one range</option>
+       <option value="every">Every N pages → zip</option>
+       <option value="ranges">Several ranges → zip</option>`);
+    sel.value = mode;
+    fm.appendChild(sel); left.appendChild(fm);
+    if (mode === "single") {
+      const field = el("div", { class: "field" }, `<label>Page range</label>`);
       const row = el("div", { class: "row-inputs" });
       if (pages) { startI.max = pages; endI.max = pages; if (+endI.value < 2) endI.value = pages; }
       row.append(startI, el("span", {}, "to"), endI); field.appendChild(row); left.appendChild(field);
-      left.appendChild(btn);
+    } else if (mode === "every") {
+      const field = el("div", { class: "field" }, `<label>Pages per file</label>`);
+      field.appendChild(everyI); left.appendChild(field);
+    } else {
+      const field = el("div", { class: "field" }, `<label>Ranges — one PDF per comma-separated chunk</label>`);
+      field.appendChild(rangesI); left.appendChild(field);
     }
+    left.appendChild(btn);
   }
   renderLeft();
   grid.append(left, right); root.appendChild(grid);
@@ -1054,7 +1141,7 @@ ENGINES.ocr = (tool, root) => {
   const actions = el("div", { class: "tool-actions" });
   const right = outColumn("Recognized text", actions);
   right.body.appendChild(placeholder("No text yet", "Load a scanned PDF and run OCR."));
-  let file = null, lang = "eng", text = "";
+  let file = null, lang = "eng", text = "", pagesData = [];
   const copyBtn = el("button", { class: "tbtn", type: "button", onclick: () => { navigator.clipboard.writeText(text); } }, `${I.copy} Copy`);
   const dlBtn = el("button", { class: "tbtn", type: "button", onclick: () => download(text, (file ? stem(file.name) : "ocr") + ".txt", MIME.txt) }, `${I.dl} .txt`);
   const dz = dropzone({ accept: ".pdf", label: "Drop a scanned PDF or click to browse",
@@ -1066,7 +1153,7 @@ ENGINES.ocr = (tool, root) => {
     prog.style.display = ""; const log = prog.querySelector(".plog"), bar = prog.querySelector(".bar > i");
     const put = (m) => { log.appendChild(el("div", {}, "› " + m)); log.scrollTop = log.scrollHeight; };
     btn.setBusy(true, "Reading…"); setRuntime("busy", "running OCR on-device…");
-    text = "";
+    text = ""; pagesData = [];
     try {
       const [pdfjs, Tesseract] = await Promise.all([ensurePdfjs(), ensureTesseract()]);
       put("opening document…");
@@ -1079,14 +1166,26 @@ ENGINES.ocr = (tool, root) => {
         const c = el("canvas"); c.width = vp.width; c.height = vp.height;
         await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
         put(`page ${i} — recognizing…`);
-        const { data: { text: t } } = await Tesseract.recognize(c, lang, {
+        const { data: rec } = await Tesseract.recognize(c, lang, {
           logger: (mm) => { if (mm.status === "recognizing text") bar.style.width = Math.round(mm.progress * 100) + "%"; },
         });
+        const t = rec.text;
+        pagesData.push({ scale: 2, words: (rec.words || []).filter((w) => w.text && w.text.trim()).map((w) => ({
+          t: w.text, x0: w.bbox.x0, y0: w.bbox.y0, x1: w.bbox.x1, y1: w.bbox.y1 })) });
         text += `--- Page ${i} ---\n${(t || "").trim()}\n\n`;
         right.body.innerHTML = ""; right.body.appendChild(el("div", { class: "text-out" }, escapeHtml(text)));
         actions.innerHTML = ""; actions.append(copyBtn, dlBtn);
       }
       put("done.");
+      const sBtn = el("button", { class: "tbtn", type: "button", onclick: async () => {
+        try {
+          sBtn.disabled = true;
+          const res = await callEngine("ocrOverlay", { pages: pagesData }, [await readBuf(file)]);
+          download(res.bytes, stem(file.name) + "_searchable.pdf", MIME.pdf);
+        } catch (err) { showError(right.body, err); }
+        finally { sBtn.disabled = false; }
+      } }, `${I.dl} Searchable PDF`);
+      actions.appendChild(sBtn);
     } catch (err) { showError(right.body, err); }
     finally { btn.setBusy(false); prog.style.display = "none"; if (engineReady) setRuntime("ready", "ready · on-device"); }
   });
@@ -1098,7 +1197,7 @@ ENGINES.ocr = (tool, root) => {
       left.appendChild(files);
       const field = el("div", { class: "field" }, `<label>Document language</label>`);
       const sel = el("select", { class: "input", onchange: (e) => lang = e.target.value },
-        `<option value="eng">English</option><option value="spa">Spanish</option><option value="fra">French</option><option value="deu">German</option><option value="ita">Italian</option><option value="por">Portuguese</option>`);
+        `<option value="eng">English</option><option value="hin">हिन्दी Hindi</option><option value="eng+hin">English + Hindi</option><option value="spa">Spanish</option><option value="fra">French</option><option value="deu">German</option><option value="ita">Italian</option><option value="por">Portuguese</option>`);
       field.appendChild(sel); left.appendChild(field); left.appendChild(btn); left.appendChild(prog);
     }
   }
