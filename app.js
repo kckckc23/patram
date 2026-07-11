@@ -141,12 +141,39 @@ function engineHint(heavy) {
      works offline afterwards. Your file still never leaves this device.`);
 }
 
+/* docx → styled HTML → the browser's own print engine ("Save as PDF").
+   The simplest high-formatting path that exists client-side: no re-typesetting,
+   real bold/italic/lists/tables/images, pagination by the browser. */
+async function printDocxView(file) {
+  const mammoth = await ensureMammoth();
+  const { value: html } = await mammoth.convertToHtml({ arrayBuffer: await file.arrayBuffer() });
+  const frame = el("iframe", { style: "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden" });
+  document.body.appendChild(frame);
+  const doc = frame.contentDocument;
+  doc.open();
+  doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(stem(file.name))}</title><style>
+    @page { margin: 2cm; }
+    body { font: 12pt/1.5 "Carlito", "Calibri", "Noto Sans", sans-serif; color: #111; }
+    h1, h2, h3, h4 { line-height: 1.25; page-break-after: avoid; }
+    table { border-collapse: collapse; page-break-inside: avoid; }
+    td, th { border: 1px solid #999; padding: 4px 8px; vertical-align: top; }
+    img { max-width: 100%; }
+    p { margin: 0 0 .6em; }
+  </style></head><body>${html}</body></html>`);
+  doc.close();
+  await new Promise((r) => setTimeout(r, 400)); // let embedded images decode
+  frame.contentWindow.focus();
+  frame.contentWindow.print();
+  setTimeout(() => frame.remove(), 60000); // keep alive while the dialog is open
+}
+
 /* ---- lazy JS engines (CDN) ---------------------------------------------- */
 const loaded = {};
 function loadScript(url) {
   if (loaded[url]) return loaded[url];
   loaded[url] = new Promise((res, rej) => {
     const s = el("script", { src: url });
+    s.crossOrigin = "anonymous"; // cors request → the service worker can cache it for offline
     s.onload = res; s.onerror = () => rej(new Error("Failed to load " + url));
     document.head.appendChild(s);
   });
@@ -155,9 +182,13 @@ function loadScript(url) {
 async function ensurePdfjs() {
   if (window.pdfjsLib) return window.pdfjsLib;
   await loadScript("https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js");
-  window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+  // Fetch the worker script ourselves (cors → SW-cached → offline) and hand
+  // pdf.js a same-origin blob URL; its own cross-origin wrapper defeats caching.
+  const src = await (await fetch("https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js", { mode: "cors" })).blob();
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(src);
   return window.pdfjsLib;
 }
+const ensureMammoth = () => window.mammoth ? Promise.resolve(window.mammoth) : loadScript("https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js").then(() => window.mammoth);
 const ensureJSZip = () => window.JSZip ? Promise.resolve(window.JSZip) : loadScript("https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js").then(() => window.JSZip);
 const ensureTesseract = () => window.Tesseract ? Promise.resolve(window.Tesseract) : loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js").then(() => window.Tesseract);
 
@@ -210,13 +241,16 @@ const TOOLS = [
   { group: "Convert to PDF" },
   { id: "imgPdf", name: "Images → PDF", badge: "PYTHON",
     desc: "Place JPG/PNG images onto pages, one per image.",
+    keys: "img image photo picture pictures jpeg scan",
     engine: "images" },
   { id: "txtPdf", name: "Text → PDF", badge: "PYTHON",
     desc: "Type or paste text (or load a .txt) and export a PDF.",
     engine: "compose" },
   { id: "wordPdf", name: "Word → PDF", badge: "PYTHON",
-    desc: "Convert a .docx document to PDF (text & headings).",
-    engine: "convert", action: "wordToPdf", accept: ".docx", out: "pdf", suffix: "" },
+    desc: "Convert a .docx to PDF — quick re-typeset, or full formatting via your browser's print engine.",
+    keys: "docx doc word document",
+    engine: "convert", action: "wordToPdf", accept: ".docx", out: "pdf", suffix: "",
+    printView: true },
   { id: "xlsxPdf", name: "Excel / CSV → PDF", badge: "PYTHON",
     desc: "Render a spreadsheet as a formatted table PDF.",
     engine: "table" },
@@ -236,8 +270,9 @@ const TOOLS = [
     params: { engine: "hifi" }, fallbackParams: { engine: "basic" },
     heavy: { mb: 8, label: "table-detection engine (pdfplumber)" } },
   { id: "pdfPpt", name: "PDF → PowerPoint", badge: "PYTHON",
-    desc: "Turn each page's text into a .pptx slide.",
-    engine: "convert", action: "pdfToPpt", accept: ".pdf", out: "pptx", suffix: "" },
+    desc: "Each page becomes a slide, pixel-faithful — or extract editable text instead.",
+    keys: "pptx slides presentation",
+    engine: "pdf2ppt", accept: ".pdf" },
 ];
 
 /* ---- index (tool discovery) + workbench --------------------------------- */
@@ -272,7 +307,7 @@ function buildIndex() {
   });
   TOOLLIST.forEach((t) => {
     const card = el("button", { class: "tool-card", type: "button", "data-id": t.id,
-      "data-cat": t._cat, "data-search": (t.name + " " + t._cat + " " + t.desc).toLowerCase(),
+      "data-cat": t._cat, "data-search": (t.name + " " + t._cat + " " + t.desc + " " + (t.keys || "")).toLowerCase(),
       onclick: () => selectTool(t.id) },
       `<span class="fol">${t._code}</span>
        <span class="ico">${CATICON[t._cat] || I.doc}</span>
@@ -423,6 +458,19 @@ ENGINES.convert = (tool, root) => {
     left.appendChild(dz);
     if (file) { const files = el("div", { class: "files" }); files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } })); left.appendChild(files); }
     left.appendChild(btn);
+    if (tool.printView && file) {
+      const pv = el("button", { class: "tbtn", type: "button", style: "margin-top:10px",
+        onclick: async () => {
+          try { pv.disabled = true; await printDocxView(file); }
+          catch (err) { showError(right.body, err); }
+          finally { pv.disabled = false; }
+        } },
+        `${I.doc} Full formatting — print view (choose “Save as PDF”)`);
+      left.appendChild(pv);
+      left.appendChild(el("p", { class: "engine-hint" },
+        `${I.shield} The print view keeps bold, lists, tables and images, and uses your
+         browser's own print engine — pick “Save as PDF” in the dialog. Still fully on-device.`));
+    }
     if (firstUse()) left.appendChild(engineHint(tool.heavy));
   }
   renderLeft();
@@ -471,6 +519,73 @@ ENGINES.qpdf = (tool, root) => {
         left.appendChild(field);
       }
       left.appendChild(btn);
+    }
+  }
+  renderLeft();
+  grid.append(left, right); root.appendChild(grid);
+};
+
+/* pdf → pptx: render every page (pdf.js) and place it full-bleed on a slide —
+   pixel-faithful; an editable-text extraction remains available as plan B */
+ENGINES.pdf2ppt = (tool, root) => {
+  const grid = el("div", { class: "grid2" });
+  const left = el("div"), right = outColumn("Result");
+  right.body.appendChild(placeholder("Nothing yet", "Load a PDF to turn its pages into slides."));
+  let file = null;
+  const dz = dropzone({ accept: ".pdf", label: "Drop a PDF or click to browse",
+    onFiles: (f) => { file = f[0]; renderLeft(); } });
+  const btn = runButton("Convert to slides");
+  const prog = el("div", { class: "progress", style: "display:none" }, `<div class="plog"></div><div class="bar"><i></i></div>`);
+  btn.addEventListener("click", async () => {
+    if (!file) return;
+    prog.style.display = ""; const log = prog.querySelector(".plog"), bar = prog.querySelector(".bar > i");
+    const put = (m) => { log.appendChild(el("div", {}, "› " + m)); log.scrollTop = log.scrollHeight; };
+    try {
+      await withBusy(btn, "Rendering pages…", async () => {
+        const pdfjs = await ensurePdfjs();
+        const data = new Uint8Array(await readBuf(file));
+        const doc = await pdfjs.getDocument({ data }).promise;
+        const one = (await doc.getPage(1)).getViewport({ scale: 1 }); // PDF points
+        const bufs = [];
+        for (let i = 1; i <= doc.numPages; i++) {
+          put(`page ${i} / ${doc.numPages}`); bar.style.width = Math.round((i / doc.numPages) * 100) + "%";
+          const page = await doc.getPage(i);
+          const vp = page.getViewport({ scale: 2 });
+          const c = el("canvas"); c.width = vp.width; c.height = vp.height;
+          await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+          const blob = await new Promise((r) => c.toBlob(r, "image/png"));
+          bufs.push(await blob.arrayBuffer());
+        }
+        put("building presentation…");
+        const res = await callEngine("imagesToPpt", { w: one.width, h: one.height }, bufs,
+          (msg) => btn.setBusy(true, msg));
+        right.body.innerHTML = "";
+        right.body.appendChild(resultCard({ bytes: res.bytes, name: `${stem(file.name)}.pptx`, mime: MIME.pptx,
+          stats: [["Slides", doc.numPages], ["Output", fmtBytes(res.bytes.byteLength)]] }));
+      });
+    } catch (err) { showError(right.body, err); }
+    finally { prog.style.display = "none"; }
+  });
+  const alt = el("button", { class: "tbtn", type: "button", style: "margin-top:10px",
+    onclick: async () => {
+      if (!file) return;
+      try {
+        await withBusy(btn, "Extracting text…", async () => {
+          const res = await callEngine("pdfToPpt", {}, [await readBuf(file)]);
+          right.body.innerHTML = "";
+          right.body.appendChild(resultCard({ bytes: res.bytes, name: `${stem(file.name)}_text.pptx`, mime: MIME.pptx,
+            stats: [["Output", fmtBytes(res.bytes.byteLength)]] }));
+        });
+      } catch (err) { showError(right.body, err); }
+    } },
+    `${I.doc} Editable text instead (loses layout)`);
+  function renderLeft() {
+    left.innerHTML = ""; left.appendChild(dz);
+    if (file) {
+      const files = el("div", { class: "files" });
+      files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } }));
+      left.appendChild(files);
+      left.appendChild(btn); left.appendChild(alt); left.appendChild(prog);
     }
   }
   renderLeft();

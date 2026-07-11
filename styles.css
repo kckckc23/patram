@@ -350,9 +350,12 @@ h1, h2, h3 { margin: 0; font-family: var(--display); font-weight: 400; letter-sp
 .thumb { position: relative; border: 1px solid var(--line-2); border-radius: 8px; background: var(--surface-2); overflow: hidden; }
 .thumb.dragging { opacity: .4; }
 .thumb canvas { display: block; width: 100%; height: auto; transition: transform .2s; }
-.thumb .tnum { position: absolute; top: 5px; left: 5px; font-family: var(--mono); font-size: 10px; background: rgba(44,30,18,.82); color: #f2e7c8; padding: 2px 6px; border-radius: 5px; }
-.thumb .tctl { position: absolute; top: 5px; right: 5px; display: flex; gap: 4px; }
-.thumb .tctl button { width: 24px; height: 24px; border-radius: 6px; border: 0; background: rgba(251,243,220,.94); color: var(--ink); display: grid; place-items: center; box-shadow: var(--shadow); }
+/* z-index 2: the canvas carries a transform (rotation), which layers it above
+   these absolutely-positioned controls in paint order — without it they exist
+   but are painted over and invisible */
+.thumb .tnum { position: absolute; top: 5px; left: 5px; z-index: 2; font-family: var(--mono); font-size: 10px; background: rgba(44,30,18,.82); color: #f2e7c8; padding: 2px 6px; border-radius: 5px; }
+.thumb .tctl { position: absolute; top: 5px; right: 5px; z-index: 2; display: flex; gap: 4px; }
+.thumb .tctl button { width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--line-2); background: rgba(251,243,220,.97); color: var(--ink); display: grid; place-items: center; box-shadow: var(--shadow); }
 .thumb .tctl button:hover { background: #fff; color: var(--sindoor); }
 .thumb .tctl button.del:hover { color: var(--maroon); }
 .thumb .tctl button svg { width: 13px; height: 13px; }
