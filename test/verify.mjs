@@ -137,6 +137,29 @@ ok(`PDF → DOCX → valid document (${(r.byteLength/1024).toFixed(1)}KB)`);
 r = run("pptToPdf", {}, [f.pptx]);
 ok(`PPTX → PDF → ${validPdf(r, "pptToPdf")} page(s)`);
 
+// designed decks keep text in tables/groups; image-only decks must error clearly
+py.runPython(`
+from pptx import Presentation
+from pptx.util import Inches
+prs = Presentation()
+s = prs.slides.add_slide(prs.slide_layouts[6])
+tb = s.shapes.add_table(2, 2, Inches(1), Inches(1), Inches(5), Inches(1.5)).table
+tb.cell(0, 0).text = "Skill"; tb.cell(0, 1).text = "Level"
+tb.cell(1, 0).text = "Python"; tb.cell(1, 1).text = "Expert"
+prs.save("/t_table.pptx")
+prs2 = Presentation()
+s2 = prs2.slides.add_slide(prs2.slide_layouts[6])
+s2.shapes.add_picture("/f.png", 0, 0)
+prs2.save("/t_img.pptx")
+`);
+r = run("pptToPdf", {}, [read("/t_table.pptx")]);
+ok(`PPTX (table-only content) → PDF → ${validPdf(r, "pptToPdf table")} page(s)`);
+let threw = false;
+try { run("pptToPdf", {}, [read("/t_img.pptx")]); }
+catch (e) { threw = /extractable text/i.test(String(e)); }
+if (!threw) throw new Error("image-only pptx must raise a clear error, not emit a blank PDF");
+ok("image-only PPTX → clear error (no more blank 'Slide' PDF)");
+
 r = run("pdfToPpt", {}, [f.pdf]);
 py.FS.writeFile("/o.pptx", r);
 py.runPython(`from pptx import Presentation; Presentation("/o.pptx")`);
@@ -208,6 +231,11 @@ await micropip.install("pdfplumber", deps=False)
   py.FS.writeFile("/o2.docx", r);
   const paras = py.runPython(`import docx; len(docx.Document("/o2.docx").paragraphs)`);
   ok(`PDF → Word (pdf2docx) → valid docx, ${paras} paragraphs (${(r.byteLength / 1024).toFixed(1)}KB)`);
+
+  r = run("pdfToWord", { engine: "hifi", start: 2, end: 3 }, [f.pdf]);
+  py.FS.writeFile("/o2r.docx", r);
+  py.runPython(`import docx; docx.Document("/o2r.docx")`);
+  ok(`PDF → Word range 2-3 → valid docx (${(r.byteLength / 1024).toFixed(1)}KB)`);
 
   r = run("pdfToXlsx", { engine: "hifi" }, [f.pdf]);
   py.FS.writeFile("/o2.xlsx", r);
