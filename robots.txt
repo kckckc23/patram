@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /test/
+Disallow: /poc/
+Disallow: /samples/
+
+Sitemap: https://patrampdf.karanchauhan.me/sitemap.xml
