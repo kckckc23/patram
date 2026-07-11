@@ -146,6 +146,11 @@ ok(`PDF → PPTX → valid presentation (${(r.byteLength/1024).toFixed(1)}KB)`);
 r = run("imagesToPdf", { n: 2, size: "a4" }, [f.png, f.png]);
 ok(`images → PDF → ${validPdf(r, "imagesToPdf")} pages (2 expected)`);
 
+r = run("imagesToPpt", { n: 2, w: 612, h: 792 }, [f.png, f.png]);
+py.FS.writeFile("/o3.pptx", r);
+const slides = py.runPython(`from pptx import Presentation; len(list(Presentation("/o3.pptx").slides))`);
+ok(`images → PPTX (faithful slides) → ${slides} slides (${(r.byteLength / 1024).toFixed(1)}KB)`);
+
 // pageCount
 const pc = run("pageCount", {}, [f.pdf]);
 if (pc.pages !== 4) throw new Error("pageCount wrong: " + pc.pages);
