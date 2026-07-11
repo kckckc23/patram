@@ -263,6 +263,7 @@ const TOOLS = [
     desc: "Rebuild an editable .docx — flowing text, tables and images.",
     engine: "convert", action: "pdfToWord", accept: ".pdf", out: "docx", suffix: "",
     params: { engine: "hifi" }, fallbackParams: { engine: "basic" },
+    rangeOption: true,
     heavy: { mb: 33, label: "high-fidelity engine (pdf2docx)" } },
   { id: "pdfXlsx", name: "PDF → Excel", badge: "PYTHON",
     desc: "Detect real tables into an .xlsx workbook, sheet per page.",
@@ -428,8 +429,11 @@ ENGINES.convert = (tool, root) => {
     onFiles: (f) => { file = f[0]; renderLeft(); } });
   const firstUse = () => tool.heavy && !engineOk(tool.id);
   const btn = runButton(firstUse() ? `Download engine (~${tool.heavy.mb} MB) & convert` : "Convert");
+  const rangeI = el("input", { class: "input mono", type: "text", placeholder: "e.g. 10-45 · empty = all pages" });
   async function doRun(params) {
     if (!file) return;
+    const m = rangeI.value.trim().match(/^(\d+)(?:\s*-\s*(\d+))?$/);
+    if (tool.rangeOption && m) { params.start = +m[1]; params.end = +(m[2] || m[1]); }
     if (tool.heavy) requestPersistence();
     try {
       await withBusy(btn, "Converting…", async () => {
@@ -457,6 +461,12 @@ ENGINES.convert = (tool, root) => {
     left.innerHTML = "";
     left.appendChild(dz);
     if (file) { const files = el("div", { class: "files" }); files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } })); left.appendChild(files); }
+    if (tool.rangeOption && file) {
+      const field = el("div", { class: "field" },
+        `<label>Page range · optional — much faster for large documents</label>`);
+      field.appendChild(rangeI);
+      left.appendChild(field);
+    }
     left.appendChild(btn);
     if (tool.printView && file) {
       const pv = el("button", { class: "tbtn", type: "button", style: "margin-top:10px",
@@ -546,15 +556,21 @@ ENGINES.pdf2ppt = (tool, root) => {
         const data = new Uint8Array(await readBuf(file));
         const doc = await pdfjs.getDocument({ data }).promise;
         const one = (await doc.getPage(1)).getViewport({ scale: 1 }); // PDF points
+        // JPEG at ~1600px, not PNG at 2×: for a 300-page book that is the
+        // difference between ~40 MB and ~600 MB of slide images
+        const scale = Math.min(2, 1600 / Math.max(one.width, one.height));
         const bufs = [];
         for (let i = 1; i <= doc.numPages; i++) {
           put(`page ${i} / ${doc.numPages}`); bar.style.width = Math.round((i / doc.numPages) * 100) + "%";
           const page = await doc.getPage(i);
-          const vp = page.getViewport({ scale: 2 });
+          const vp = page.getViewport({ scale });
           const c = el("canvas"); c.width = vp.width; c.height = vp.height;
-          await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
-          const blob = await new Promise((r) => c.toBlob(r, "image/png"));
+          const ctx = c.getContext("2d");
+          ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height); // JPEG has no alpha
+          await page.render({ canvasContext: ctx, viewport: vp }).promise;
+          const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.85));
           bufs.push(await blob.arrayBuffer());
+          c.width = 0; c.height = 0; // release canvas memory promptly on big documents
         }
         put("building presentation…");
         const res = await callEngine("imagesToPpt", { w: one.width, h: one.height }, bufs,
