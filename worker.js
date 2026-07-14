@@ -100,6 +100,15 @@ self.onmessage = async (e) => {
     await ready;
     if (!pyodide) throw new Error("Engine is not running.");
 
+    // background prefetch: warm the font pack / a heavy engine, no job to run
+    if (action === "warm") {
+      const w = params || {};
+      if (w.fonts) await ensureFonts(note);
+      if (w.engine) await ensureEngine(w.engine, note);
+      post("result", { id, kind: "json", data: { warmed: true } });
+      return;
+    }
+
     // fonts are an enhancement — if they can't be fetched, render with core fonts
     if (FONT_ACTIONS.has(action)) await ensureFonts(note).catch(() => {});
     const eng = requiredEngine(action, params || {});

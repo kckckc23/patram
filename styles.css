@@ -171,6 +171,9 @@ h1, h2, h3 { margin: 0; font-family: var(--display); font-weight: 400; letter-sp
 .boot-readout .l .ok { color: #9fd07a; }
 .boot-readout .l .dim { color: #7085a8; }
 .boot-readout .caret { color: var(--haldi); }
+.svc-readout { margin-top: 10px; min-height: 0; }
+.boot-readout .l .spin { display: inline-block; width: 1em; height: 1em; vertical-align: -.15em; animation: spin 1s linear infinite; }
+.boot-readout .l .spin svg { width: 100%; height: 100%; color: var(--haldi); }
 
 .pledges { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
 .pledge { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; letter-spacing: .03em; color: var(--ink-2); }
