@@ -91,20 +91,23 @@ worker.onmessage = (e) => {
     engineReady = true; setRuntime("ready", "ready · on-device");
     pushBoot("engine ready — nothing left this device", true);
     document.querySelectorAll(".run[data-needs-engine]").forEach((b) => (b.disabled = false));
+    onIdle(prefetchEngines); // quietly warm the lazy engines so first use is instant
   }
   else if (m.type === "result") { const p = pending.get(m.id); if (p) { pending.delete(m.id); p.resolve(m); } }
-  else if (m.type === "status") { const p = pending.get(m.id); if (p && p.onStatus) p.onStatus(m.msg); setRuntime("busy", m.msg); }
+  else if (m.type === "status") { const p = pending.get(m.id); if (p && p.onStatus) p.onStatus(m.msg); if (!(p && p.bg)) setRuntime("busy", m.msg); }
   else if (m.type === "error") {
     if (m.id != null) { const p = pending.get(m.id); if (p) { pending.delete(m.id); p.reject(new Error(m.msg)); } }
     else { setRuntime("error", "engine failed"); pushBoot("ERROR: " + m.msg, true); }
   }
 };
-function callEngine(action, params, buffers, onStatus) {
+let foreground = 0; // count of real (non-prefetch) jobs in flight
+function callEngine(action, params, buffers, onStatus, bg) {
+  if (!bg) foreground++;
   return new Promise((resolve, reject) => {
     const id = ++reqId;
-    pending.set(id, { resolve, reject, onStatus });
+    pending.set(id, { resolve, reject, onStatus, bg });
     worker.postMessage({ id, action, params: params || {}, files: buffers || [] }, buffers || []);
-  });
+  }).finally(() => { if (!bg) foreground--; });
 }
 
 /* ---- qpdf worker (native PDF plumbing, lazy) ----------------------------- */
@@ -191,6 +194,70 @@ async function ensurePdfjs() {
 const ensureMammoth = () => window.mammoth ? Promise.resolve(window.mammoth) : loadScript("https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js").then(() => window.mammoth);
 const ensureJSZip = () => window.JSZip ? Promise.resolve(window.JSZip) : loadScript("https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js").then(() => window.JSZip);
 const ensureTesseract = () => window.Tesseract ? Promise.resolve(window.Tesseract) : loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js").then(() => window.Tesseract);
+
+/* ---- background prefetch: warm lazy engines so first use is instant -------
+   Light JS libs (~0.5 MB) are always warmed on idle. The heavy Python engines
+   (PyMuPDF / pdfplumber / pdf2docx) and the font pack are only auto-fetched
+   when the connection looks unmetered (Wi-Fi-class, no Save-Data); otherwise
+   they stay on-demand and still cache on the user's first real run. OCR
+   (tesseract, ~12 MB) is deliberately excluded — its own loader defeats SW
+   caching, so a prefetch wouldn't survive offline anyway. */
+const SERVICES = {
+  pdfjs:      { label: "Page renderer",      light: true, warm: () => ensurePdfjs() },
+  jszip:      { label: "Zip packer",         light: true, warm: () => ensureJSZip() },
+  mammoth:    { label: "Word reader",        light: true, warm: () => ensureMammoth() },
+  fonts:      { label: "Unicode fonts",      warm: () => callEngine("warm", { fonts: true }, [], null, true) },
+  pymupdf:    { label: "Compression engine", consent: "compress-max", warm: () => callEngine("warm", { engine: "pymupdf" }, [], null, true) },
+  pdfplumber: { label: "Table engine",       consent: "pdfXlsx",      warm: () => callEngine("warm", { engine: "pdfplumber" }, [], null, true) },
+  pdf2docx:   { label: "PDF\u2192Word engine",   consent: "pdfWord",      warm: () => callEngine("warm", { engine: "pdf2docx" }, [], null, true) },
+};
+const svcState = {}; // key -> "loading" | "ready" | "error"
+function warmService(key) {
+  const svc = SERVICES[key];
+  if (!svc) return Promise.resolve();
+  if (svc._p) return svc._p; // already warming or warmed
+  svcState[key] = "loading"; renderServices();
+  svc._p = Promise.resolve().then(svc.warm).then(() => {
+    svcState[key] = "ready";
+    if (svc.consent) engineMarkOk(svc.consent); // pre-consented: skip the later download prompt
+  }).catch(() => { svcState[key] = "error"; svc._p = null; /* leave it on-demand */ })
+    .finally(renderServices);
+  return svc._p;
+}
+function unmetered() { // navigator.connection is Chromium-only; elsewhere -> false (conservative)
+  const c = navigator.connection;
+  return !!c && !c.saveData && c.effectiveType === "4g";
+}
+function onIdle(fn) {
+  (window.requestIdleCallback || ((f) => setTimeout(() => f(), 800)))(fn, { timeout: 4000 });
+}
+let prefetchStarted = false;
+function prefetchEngines() {
+  if (prefetchStarted) return; prefetchStarted = true;
+  const light = ["pdfjs", "jszip", "mammoth"];
+  const heavy = ["fonts", "pymupdf", "pdfplumber", "pdf2docx"];
+  const queue = unmetered() ? light.concat(heavy) : light;
+  (async () => {
+    for (const k of queue) {
+      // never queue a big install ahead of the user's own work
+      if (!SERVICES[k].light) while (foreground > 0) await new Promise((r) => setTimeout(r, 400));
+      await warmService(k);
+    }
+  })();
+}
+function renderServices() {
+  const box = $("#svcReadout");
+  if (!box) return;
+  const rows = Object.keys(SERVICES)
+    .filter((k) => svcState[k] === "loading" || svcState[k] === "ready")
+    .map((k) => {
+      const ready = svcState[k] === "ready";
+      const mark = ready ? '<span class="ok">\u2713</span>' : `<span class="spin">${I.spin}</span>`;
+      return `<span class="l">${mark} ${escapeHtml(SERVICES[k].label)}${ready ? " ready" : " \u2014 preparing\u2026"}</span>`;
+    });
+  box.innerHTML = rows.join("");
+  box.hidden = rows.length === 0;
+}
 
 /* ---- tool registry ------------------------------------------------------ */
 const TOOLS = [
@@ -1304,6 +1371,7 @@ function renderHero() {
   ["No file upload", "Runs offline once loaded", "Open the network tab — it stays quiet"].forEach((t) =>
     pledges.appendChild(el("span", { class: "pledge" }, `${I.shield}${t}`)));
   renderBoot($("#bootReadout"));
+  renderServices();
 }
 
 /* ---- boot --------------------------------------------------------------- */
