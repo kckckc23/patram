@@ -477,29 +477,31 @@ function renderNotes(data) {
     notesStage.appendChild(placeholder("Nothing published yet", "The first release will appear here."));
     return;
   }
-  const list = el("div", { class: "notes-list" });
-  releases.forEach((r) => {
-    const rel = el("article", { class: "release" });
-    const head = el("div", { class: "release-head" });
-    head.appendChild(el("h3", {}, escapeHtml(String(r.version))));
-    if (r.date) head.appendChild(el("time", { datetime: r.date }, fmtReleaseDate(r.date)));
-    if (String(r.version).toLowerCase() === "unreleased")
-      head.appendChild(el("span", { class: "rel-tag" }, "in progress"));
+  /* a folio timeline: one dot per release down a rail, newest first */
+  const tl = el("div", { class: "timeline" });
+  releases.forEach((r, i) => {
+    const version = String(r.version);
+    const rel = el("article", { class: "tl-release" });
+    const head = el("div", { class: "tl-head" });
+    head.appendChild(el("h3", { class: "tl-version" }, escapeHtml(version)));
+    if (r.date) head.appendChild(el("time", { class: "tl-date", datetime: r.date }, fmtReleaseDate(r.date)));
+    if (version.toLowerCase() === "unreleased") head.appendChild(el("span", { class: "rel-tag" }, "in progress"));
+    else if (i === 0) head.appendChild(el("span", { class: "rel-tag" }, "newest"));
     rel.appendChild(head);
     (r.groups || []).forEach((g) => {
-      rel.appendChild(el("h4", { class: "grp", "data-grp": g.title }, escapeHtml(g.title)));
-      const ul = el("ul", { class: "grp-list" });
+      rel.appendChild(el("h4", { class: "tl-grp", "data-grp": g.title }, escapeHtml(g.title)));
+      const ul = el("ul", { class: "tl-list" });
       (g.entries || []).forEach((e) => {
-        const li = el("li", {});
-        if (e.scope) li.appendChild(el("span", { class: "scope" }, escapeHtml(e.scope)));
-        li.appendChild(document.createTextNode(e.text || ""));
+        const li = el("li", { class: "tl-row", "data-grp": g.title });
+        li.appendChild(el("span", { class: "tl-tag" }, escapeHtml(e.scope || g.title.toLowerCase())));
+        li.appendChild(el("span", { class: "tl-text" }, escapeHtml(e.text || "")));
         ul.appendChild(li);
       });
       rel.appendChild(ul);
     });
-    list.appendChild(rel);
+    tl.appendChild(rel);
   });
-  notesStage.appendChild(list);
+  notesStage.appendChild(tl);
 }
 
 const MONTHS = ["January", "February", "March", "April", "May", "June",
