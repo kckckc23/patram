@@ -270,6 +270,32 @@ const hasWord = py.runPython(`from pypdf import PdfReader
 if (!hasWord) throw new Error("OCR overlay text is not extractable");
 ok(`OCR overlay → searchable pdf (invisible word layer extracts back)`);
 
+// placed images: two on page 1, one on page 3 — including an alpha PNG
+py.runPython(`
+from PIL import Image
+Image.new("RGBA", (200, 120), (200, 40, 40, 140)).save("/f_alpha.png")
+`);
+r = run("placeImages", { n: 3, placements: [
+  { img: 0, page: 0, x: 0.10, y: 0.10, w: 0.30, h: 0.18 },
+  { img: 1, page: 0, x: 0.60, y: 0.70, w: 0.25, h: 0.15 },
+  { img: 0, page: 2, x: 0.35, y: 0.40, w: 0.30, h: 0.20 },
+] }, [f.pdf, f.png, read("/f_alpha.png")]);
+py.FS.writeFile("/o7.pdf", r);
+validPdf(r, "placeImages");
+const perPage = py.runPython(`from pypdf import PdfReader
+",".join(str(len(p.images)) for p in PdfReader("/o7.pdf").pages)`);
+if (perPage !== "2,0,1,0") throw new Error("placeImages: images landed on the wrong pages — " + perPage);
+ok(`place images → composited on the requested pages only [${perPage}]`);
+
+// out-of-range fractions are clamped, not fatal; nothing placed is an error
+r = run("placeImages", { n: 2, placements: [{ img: 0, page: 0, x: -0.5, y: 0.9, w: 2, h: 2 }] }, [f.pdf, f.png]);
+ok(`place images → out-of-range placement clamped → ${validPdf(r, "placeImages")} pages`);
+let placeThrew = "";
+try { run("placeImages", { n: 2, placements: [] }, [f.pdf, f.png]); }
+catch (e) { placeThrew = String(e); }
+if (!/Place at least one image/.test(placeThrew)) throw new Error("placeImages: empty list must raise a human error");
+ok("place images → nothing placed fails with a human message");
+
 // ---- heavy engines (run with --full; downloads ~40MB of wheels once) ------
 if (process.argv.includes("--full")) {
   step("Heavy engines (--full): PyMuPDF, pdf2docx, pdfplumber…");

@@ -78,8 +78,10 @@ app.js (UI controller, single file, no framework)
   have no wasm wheels); real deps install explicitly first. The Unicode font pack is
   fetched into FS `/fonts` on the first text-rendering action.
 - **Overlay mechanism**: `_overlay_merge()` (fpdf2 canvas merged onto original pages
-  via pypdf) powers stamp/watermark/page-numbers AND the searchable-OCR text layer
-  (fpdf2 INVISIBLE text mode). Reuse it for anything drawn "onto" existing pages.
+  via pypdf) powers stamp/watermark/page-numbers, the searchable-OCR text layer
+  (fpdf2 INVISIBLE text mode), AND `placeImages` (user-positioned images; the UI
+  sends x/y/w/h as fractions of the page box, origin top-left, so a placement is
+  page-size independent). Reuse it for anything drawn "onto" existing pages.
 - **Batch mode** is a UI-side loop: tools with `batch: true` accept many files, call
   the engine per file, and zip results with JSZip. Single file = unchanged behavior.
 - **UI registry**: `TOOLS` entries → renderer from `ENGINES` keyed by `tool.engine`.
