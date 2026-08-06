@@ -7,11 +7,12 @@
  * responses are stored (opaque responses are quota-padded and unusable under
  * a future cross-origin-isolated deployment).
  */
-const VERSION = "patram-sw-v5";
+const VERSION = "patram-sw-v7";
 const CORE = [
   "./", "./index.html", "./styles.css", "./app.js", "./favicon.svg",
   "./manifest.webmanifest",
   "./worker.js", "./qpdf-worker.js", "./pdf_tools.py", "./fonts/manifest.json",
+  "./patchnotes.json",
 ];
 const ENGINE_HOSTS = new Set([
   "cdn.jsdelivr.net",          // pyodide, pdf.js, tesseract.js, jszip, qpdf, mammoth
@@ -47,7 +48,14 @@ self.addEventListener("fetch", (e) => {
   // Left un-intercepted they behave exactly as before this SW existed.
   if (!sameOrigin && req.mode !== "cors") return;
 
-  const isEngineAsset = !sameOrigin || url.pathname.includes("/fonts/");
+  // pypi.org/simple/<pkg>/ is a MUTABLE index — cache-first froze every browser
+  // on the package versions it resolved on its first visit, so a later code push
+  // could meet stale wheels and fail at run time. Network-first keeps it current
+  // and still falls back to cache, so offline installs keep working.
+  // Wheel URLs on files.pythonhosted.org are content-addressed, so they stay
+  // cache-first: immutable by construction.
+  const mutableIndex = url.hostname === "pypi.org";
+  const isEngineAsset = !mutableIndex && (!sameOrigin || url.pathname.includes("/fonts/"));
   e.respondWith(isEngineAsset ? cacheFirst(req) : networkFirst(req));
 });
 

@@ -46,6 +46,9 @@ node offline.mjs           # loads once, cuts network, reloads — engines must 
 cd test/fidelity && node gen-corpus.mjs && node compare.mjs --self
 # references need LibreOffice or Word (render-references.ps1 on the Windows side)
 
+# patch notes — regenerate after tagging a release (writes patchnotes.json)
+git tag v0.4.0 && node tools/gen-patchnotes.mjs
+
 # no lint step; syntax-check with:
 node --check <file>.js
 python3 -c "import ast; ast.parse(open('pdf_tools.py').read())"
@@ -99,6 +102,12 @@ app.js (UI controller, single file, no framework)
   (`PYODIDE_VERSION`), `test/verify.mjs` (`CDN`), `test/package.json` (npm `pyodide`).
 - **Boot package lists must match** between `worker.js boot()` and verify.mjs's
   install block; heavy-engine recipes must match `ENGINE_SETUP` ↔ verify's `--full`.
+- **Package versions are pinned and must stay in step**: `worker.js BOOT_PACKAGES`
+  ↔ verify.mjs's `micropip.install`. Unpinned, micropip resolves latest from
+  `pypi.org/simple/`, which the SW once cached cache-first — every browser froze
+  the versions it first saw, so a code push could meet months-old wheels and throw
+  only for returning users. `pypi.org` is network-first for that reason; wheel URLs
+  on files.pythonhosted.org are content-addressed and stay cache-first.
 - **Service worker rules**: never `respondWith()` for cross-origin non-cors requests
   (Chrome rejects SW-served responses for them — bricks engine boot). Instead make
   every engine load cors-capable at the source: `<script crossorigin>`, qpdf glue via
@@ -108,6 +117,11 @@ app.js (UI controller, single file, no framework)
 - **Font filenames are load-bearing**: `pdf_tools._register_fonts()` and
   `worker.js FONT_FILES` expect exactly `NotoSans-{Regular,Bold}.ttf` and
   `NotoSansDevanagari-{Regular,Bold}.ttf` in `fonts/` (see manifest `textEngine`).
+- **`patchnotes.json` is generated, never hand-edited**: `tools/gen-patchnotes.mjs`
+  turns tags + conventional-commit subjects into it, so commit subjects are
+  user-facing copy. Release history starts after the "node to py migration"
+  commit (the React-era commits describe software that no longer exists) and the
+  file is precached in `sw.js CORE`, so bump `VERSION` when it changes shape.
 - **Licensing is AGPL-3.0 by design** (unlocks PyMuPDF now, x2t/sdkjs next — plan.md
   §6). Any new runtime component must be AGPL-compatible and listed in `NOTICE` with
   a source link; bundled fonts stay OFL/Apache with texts in `fonts/licenses/`.

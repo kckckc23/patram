@@ -52,15 +52,21 @@
     OCR and convert PDF, Word, Excel and PowerPoint files entirely in your browser —
     nothing is uploaded. It needs JavaScript and WebAssembly to run.</p>
   </noscript>
+  <a class="skip" href="#main">Skip to tools</a>
   <div class="app">
     <header class="topbar">
       <div class="wordmark">
         <span class="glyph" aria-hidden="true">प</span>
         <span>
-          <b>Patram<span class="tld"> पत्रम्</span></b>
+          <b>Patram<span class="tld" lang="sa"> पत्रम्</span></b>
           <small>on-device document studio</small>
         </span>
       </div>
+
+      <button class="topnav" id="notesBtn" type="button" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3v5h5"/><path d="M6 2h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M9 13h6M9 17h4"/></svg>
+        Patch notes
+      </button>
 
       <!-- signature: live engine readout, styled as a scribe's seal -->
       <div class="runtime" id="runtime" data-state="booting" role="status" aria-live="polite" title="The Python engine runs on your machine">
@@ -69,7 +75,7 @@
       </div>
     </header>
 
-    <main class="studio">
+    <main class="studio" id="main">
       <!-- identity / thesis — persistent, sticky -->
       <aside class="hero-panel">
         <div class="seal" id="seal" aria-hidden="true"></div>
@@ -79,7 +85,7 @@
           <p class="lede">Merge, split, compress, OCR and convert — powered by Python
             compiled to WebAssembly, running right here in your browser. No account,
             no upload, no server.</p>
-          <p class="origin"><b>Patram</b> — पत्रम्, Sanskrit for “leaf, page” — the palm
+          <p class="origin"><b>Patram</b> — <span lang="sa">पत्रम्</span>, Sanskrit for “leaf, page” — the palm
             leaf that Indian scribes wrote on for centuries. Yours stay just as private.</p>
         </div>
         <div class="boot-readout" id="bootReadout"></div>
@@ -91,7 +97,7 @@
         <!-- illuminated index: filter, search, card grid -->
         <div class="index" id="index">
           <div class="index-bar">
-            <div class="pills" id="pills" role="tablist" aria-label="Categories"></div>
+            <div class="pills" id="pills" role="group" aria-label="Filter tools by category"></div>
             <div class="search">
               <span class="si" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg></span>
               <input id="toolSearch" type="search" placeholder="Search all tools…" autocomplete="off" aria-label="Search tools" />
@@ -100,6 +106,15 @@
           </div>
           <div class="tool-grid" id="grid"></div>
           <p class="empty" id="empty" hidden>No tool matches — try “merge”, “ocr”, or “word”.</p>
+        </div>
+
+        <!-- patch notes: generated from the git history into patchnotes.json -->
+        <div class="notes" id="notes" hidden>
+          <button class="back" id="notesBack" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+            Back to all tools
+          </button>
+          <section class="stage" id="notesStage" aria-live="polite"></section>
         </div>
 
         <!-- workbench: opens in place when a tool is chosen -->
@@ -115,7 +130,7 @@
 
     <footer class="foot">
       <span>NO UPLOAD · PROCESSED IN-BROWSER VIA PYODIDE (PYTHON/WASM)</span>
-      <span>पत्रम् · WORKS OFFLINE ONCE LOADED</span>
+      <span><span lang="sa">पत्रम्</span> · WORKS OFFLINE ONCE LOADED</span>
     </footer>
   </div>
 
