@@ -1263,6 +1263,7 @@ ENGINES.organize = (tool, root) => {
     bar.appendChild(el("div", { class: "eyebrow" }, `${thumbs.length} page${thumbs.length === 1 ? "" : "s"} · drag to reorder`));
     const btn = runButton("Save PDF");
     btn.style.marginTop = "0"; btn.style.width = "auto";
+    btn.setBusy(true, "Rendering pages…");   // inert until the board is drawn
     bar.appendChild(btn);
     left.appendChild(bar);
     const board = el("div", { class: "thumbs" });
@@ -1297,6 +1298,7 @@ ENGINES.organize = (tool, root) => {
       cell.addEventListener("drop", (e) => { e.preventDefault(); if (dragIdx === null || dragIdx === i) return; const [m] = thumbs.splice(dragIdx, 1); thumbs.splice(i, 0, m); dragIdx = null; renderBoard(); });
     }
 
+    btn.setBusy(false);
     btn.addEventListener("click", async () => {
       if (!thumbs.length) { showError(left, "Keep at least one page."); return; }
       try {
