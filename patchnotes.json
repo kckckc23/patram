@@ -1,0 +1,136 @@
+{
+ "releases": [
+  {
+   "version": "Unreleased",
+   "date": "2026-08-06",
+   "groups": [
+    {
+     "title": "Added",
+     "entries": [
+      {
+       "scope": "ui",
+       "text": "Fluid layout, wrapping that holds, colour-coded tool families"
+      },
+      {
+       "scope": "tools",
+       "text": "Place an image anywhere on a PDF page"
+      },
+      {
+       "scope": "ui",
+       "text": "PDF→Images — save one page, all pages, or a zip"
+      },
+      {
+       "scope": "ui",
+       "text": "Background-prefetch lazy engines, gated on connection"
+      },
+      {
+       "scope": "seo",
+       "text": "Canonical domain, social cards, structured data, sitemap"
+      },
+      {
+       "scope": "ui",
+       "text": "Batch mode — many files in, one zip out"
+      },
+      {
+       "scope": "engine",
+       "text": "Styled multi-sheet Excel→PDF"
+      },
+      {
+       "scope": "ui",
+       "text": "PWA install, new workbenches, Hindi OCR, low-memory notice"
+      },
+      {
+       "scope": "engine",
+       "text": "Stamps, searchable OCR, metadata strip, split-to-zip"
+      },
+      {
+       "scope": "perf",
+       "text": "Big-document ergonomics — live progress, page range, JPEG slides"
+      },
+      {
+       "scope": "convert",
+       "text": "Print-view Word→PDF, faithful PDF→PPT, findable tools"
+      },
+      {
+       "scope": "ui",
+       "text": "New workbenches, engine-download consent, offline service worker"
+      },
+      {
+       "scope": "tools",
+       "text": "Qpdf.wasm worker — Protect, Unlock, Repair, Linearize"
+      },
+      {
+       "scope": "engine",
+       "text": "Pyodide 314, Unicode PDF text, on-demand hifi engines"
+      },
+      {
+       "scope": "fonts",
+       "text": "Bundled OFL font pack — Unicode + Office-metric substitutes"
+      },
+      {
+       "scope": "ui",
+       "text": "Enhance tool discovery and interaction with updated layout and icons"
+      }
+     ]
+    },
+    {
+     "title": "Fixed",
+     "entries": [
+      {
+       "scope": "a11y",
+       "text": "Clear WCAG 2.2 AA across every workbench"
+      },
+      {
+       "scope": "engine",
+       "text": "Show the real error, and stop browsers freezing old wheels"
+      },
+      {
+       "scope": "ui",
+       "text": "Phones — workbench no longer overflows horizontally"
+      },
+      {
+       "scope": "convert",
+       "text": "PPT→PDF read tables and grouped shapes; fail honestly"
+      },
+      {
+       "scope": "offline",
+       "text": "Engines must survive a reload without network"
+      },
+      {
+       "scope": "ui",
+       "text": "Organize controls were painted over by the rotated canvas"
+      },
+      {
+       "scope": "engine",
+       "text": "Pyodide 314 requires a module worker — boot was bricked"
+      }
+     ]
+    },
+    {
+     "title": "Maintenance",
+     "entries": [
+      {
+       "text": "Exclude dev/test assets from the deploy"
+      },
+      {
+       "text": "CLAUDE.md — working agreements, architecture, contracts, gotchas"
+      },
+      {
+       "text": "Vercel Web Analytics tag + line-ending normalization"
+      },
+      {
+       "text": "Refresh README for the new engine reality"
+      },
+      {
+       "scope": "license",
+       "text": "Adopt AGPL-3.0 — LICENSE + NOTICE"
+      },
+      {
+       "text": "Add the pixel-fidelity roadmap (plan.md)"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

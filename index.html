@@ -63,6 +63,11 @@
         </span>
       </div>
 
+      <button class="topnav" id="notesBtn" type="button" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3v5h5"/><path d="M6 2h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M9 13h6M9 17h4"/></svg>
+        Patch notes
+      </button>
+
       <!-- signature: live engine readout, styled as a scribe's seal -->
       <div class="runtime" id="runtime" data-state="booting" role="status" aria-live="polite" title="The Python engine runs on your machine">
         <span class="led" aria-hidden="true"></span>
@@ -101,6 +106,15 @@
           </div>
           <div class="tool-grid" id="grid"></div>
           <p class="empty" id="empty" hidden>No tool matches — try “merge”, “ocr”, or “word”.</p>
+        </div>
+
+        <!-- patch notes: generated from the git history into patchnotes.json -->
+        <div class="notes" id="notes" hidden>
+          <button class="back" id="notesBack" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+            Back to all tools
+          </button>
+          <section class="stage" id="notesStage" aria-live="polite"></section>
         </div>
 
         <!-- workbench: opens in place when a tool is chosen -->

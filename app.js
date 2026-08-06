@@ -400,6 +400,8 @@ function buildIndex() {
   });
   searchEl.addEventListener("input", applyFilter);
   backEl.addEventListener("click", backToIndex);
+  notesBtn.addEventListener("click", () => (notesEl.hidden ? openNotes() : backToIndex()));
+  notesBackEl.addEventListener("click", backToIndex);
 }
 function applyFilter() {
   const q = searchEl.value.trim().toLowerCase();
@@ -415,6 +417,8 @@ function selectTool(id) {
   const tool = TOOLLIST.find((t) => t.id === id);
   if (!tool) return;
   activeId = id;
+  notesEl.hidden = true;
+  notesBtn.setAttribute("aria-expanded", "false");
   stage.innerHTML = "";
   stage.appendChild(renderToolHead(tool));
   ENGINES[tool.engine](tool, stage);
@@ -424,8 +428,87 @@ function selectTool(id) {
 }
 function backToIndex() {
   workbenchEl.hidden = true;
+  notesEl.hidden = true;
   indexEl.hidden = false;
+  notesBtn.setAttribute("aria-expanded", "false");
   activeId = null;
+  if (location.hash === "#patchnotes") history.replaceState(null, "", location.pathname);
+}
+
+/* ---- patch notes -------------------------------------------------------- */
+/* patchnotes.json is generated from the git history by tools/gen-patchnotes.mjs
+   — same-origin, so it is service-worker cached and readable offline. */
+const notesEl = $("#notes"), notesStage = $("#notesStage"), notesBtn = $("#notesBtn"),
+      notesBackEl = $("#notesBack");
+let notesData = null, notesLoading = null;
+
+function openNotes(fromHash) {
+  indexEl.hidden = true;
+  workbenchEl.hidden = true;
+  notesEl.hidden = false;
+  notesBtn.setAttribute("aria-expanded", "true");
+  activeId = null;
+  if (!fromHash) history.replaceState(null, "", "#patchnotes");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  if (notesData) { renderNotes(notesData); return; }
+  notesStage.innerHTML = "";
+  notesStage.appendChild(el("div", { class: "progress" },
+    `<div class="plog"><span class="dim">loading patch notes…</span></div><div class="bar indeterminate"><i></i></div>`));
+  notesLoading = notesLoading || fetch("./patchnotes.json").then((r) => {
+    if (!r.ok) throw new Error(`patchnotes.json returned ${r.status}`);
+    return r.json();
+  });
+  notesLoading.then((d) => { notesData = d; renderNotes(d); })
+    .catch((err) => {
+      notesLoading = null;
+      notesStage.innerHTML = "";
+      notesStage.appendChild(el("div", { class: "tool-head" },
+        `<div><h2>Patch notes</h2><p>What changed in each release.</p></div>`));
+      notesStage.appendChild(alertBox("Couldn't load the patch notes: " + err.message));
+    });
+}
+
+function renderNotes(data) {
+  notesStage.innerHTML = "";
+  const releases = (data && data.releases) || [];
+  notesStage.appendChild(el("div", { class: "tool-head" },
+    `<div><h2>Patch notes</h2><p>What changed in each release — generated from the project's own commit history.</p></div>
+     <span class="badge local">${releases.length} RELEASE${releases.length === 1 ? "" : "S"}</span>`));
+  if (!releases.length) {
+    notesStage.appendChild(placeholder("Nothing published yet", "The first release will appear here."));
+    return;
+  }
+  const list = el("div", { class: "notes-list" });
+  releases.forEach((r) => {
+    const rel = el("article", { class: "release" });
+    const head = el("div", { class: "release-head" });
+    head.appendChild(el("h3", {}, escapeHtml(String(r.version))));
+    if (r.date) head.appendChild(el("time", { datetime: r.date }, fmtReleaseDate(r.date)));
+    if (String(r.version).toLowerCase() === "unreleased")
+      head.appendChild(el("span", { class: "rel-tag" }, "in progress"));
+    rel.appendChild(head);
+    (r.groups || []).forEach((g) => {
+      rel.appendChild(el("h4", { class: "grp", "data-grp": g.title }, escapeHtml(g.title)));
+      const ul = el("ul", { class: "grp-list" });
+      (g.entries || []).forEach((e) => {
+        const li = el("li", {});
+        if (e.scope) li.appendChild(el("span", { class: "scope" }, escapeHtml(e.scope)));
+        li.appendChild(document.createTextNode(e.text || ""));
+        ul.appendChild(li);
+      });
+      rel.appendChild(ul);
+    });
+    list.appendChild(rel);
+  });
+  notesStage.appendChild(list);
+}
+
+const MONTHS = ["January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"];
+function fmtReleaseDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso));
+  if (!m) return String(iso);
+  return `${+m[3]} ${MONTHS[+m[2] - 1]} ${m[1]}`;
 }
 
 /* ---- shared UI bits ------------------------------------------------------ */
@@ -1692,6 +1775,12 @@ if ("serviceWorker" in navigator &&
     (location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname))) {
   navigator.serviceWorker.register("./sw.js").catch(() => {});
 }
+
+if (location.hash === "#patchnotes") openNotes(true);
+window.addEventListener("hashchange", () => {
+  if (location.hash === "#patchnotes") openNotes(true);
+  else if (!notesEl.hidden) backToIndex();
+});
 
 /* ⌘K / Ctrl-K jumps to the tool search (returning from the workbench first) */
 document.addEventListener("keydown", (e) => {

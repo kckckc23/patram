@@ -464,6 +464,47 @@ h1, h2, h3 { margin: 0; font-family: var(--display); font-weight: 400; letter-sp
 /* footer */
 .foot { margin-top: 28px; padding: 18px 4px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; color: var(--ink-3); border-top: 1px solid var(--line); }
 
+/* ---- patch notes -------------------------------------------------------- */
+.topnav {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-2); background: var(--surface);
+  border: 1px solid var(--line-ctrl); border-radius: 999px; padding: 8px 14px;
+  transition: color .12s, border-color .12s;
+}
+.topnav:hover { color: var(--sindoor); border-color: var(--sindoor); }
+.topnav[aria-expanded="true"] { color: var(--sindoor); border-color: var(--sindoor); background: var(--sindoor-wash); }
+.topnav svg { width: 14px; height: 14px; }
+
+.notes-list { display: flex; flex-direction: column; gap: 34px; }
+.release-head {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px;
+  padding-bottom: 10px; border-bottom: 1px solid var(--line); margin-bottom: 6px;
+}
+.release-head h3 { font-family: var(--display); font-size: clamp(21px, 2.3vw, 27px); color: var(--ink); overflow-wrap: anywhere; }
+.release-head time { font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); }
+.rel-tag {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--gold-2); background: var(--haldi-wash);
+  border: 1px solid var(--line-ctrl); border-radius: 999px; padding: 2px 8px;
+}
+/* one pigment per kind of change, echoing the tool-family key */
+.grp { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; margin: 18px 0 9px; }
+.grp[data-grp="Breaking"]    { color: var(--maroon); }
+.grp[data-grp="Added"]       { color: var(--mehendi); }
+.grp[data-grp="Fixed"]       { color: var(--neel); }
+.grp[data-grp="Changed"]     { color: var(--flame); }
+.grp[data-grp="Maintenance"] { color: var(--ink-2); }
+.grp-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
+.grp-list li { font-size: 14px; line-height: 1.55; color: var(--ink); overflow-wrap: anywhere; }
+.grp-list li::marker { color: var(--gold); }
+.scope {
+  display: inline-block; margin-right: 8px;
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--gold-2); background: var(--inset);
+  border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; vertical-align: 1px;
+}
+
 /* ---- responsive --------------------------------------------------------- */
 
 /* tablet & below: the hero folds from a sidebar into a full-width banner */
@@ -499,6 +540,7 @@ h1, h2, h3 { margin: 0; font-family: var(--display); font-weight: 400; letter-sp
   .tool-card .nm { font-size: 14px; }
   .tool-card .ds { font-size: 11.5px; }
   .runtime { margin-left: 0; }
+  .topnav { padding: 7px 12px; }
   .grid2 { gap: 18px; }
 }
 
