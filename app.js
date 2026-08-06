@@ -310,7 +310,7 @@ const TOOLS = [
     desc: "Read text from scanned/image PDFs with on-device OCR.",
     engine: "ocr" },
   { id: "pdfImg", name: "PDF → Images", badge: "IN-BROWSER",
-    desc: "Render each page to a JPG and download them as a zip.",
+    desc: "Render each page to a JPG — save one, all of them, or a zip.",
     engine: "pdf2img" },
 
   { group: "Convert to PDF" },
@@ -1192,51 +1192,100 @@ ENGINES.organize = (tool, root) => {
   function paint(canvas, rot) { canvas.style.transform = `rotate(${rot}deg)`; }
 };
 
-/* pdf -> images (pdf.js + zip) */
+/* pdf -> images (pdf.js) — save one page, every page separately, or a zip.
+   The page blobs are kept as-is and the gallery previews them by object URL, so
+   nothing is re-encoded for display and the zip is only built if it's asked for. */
 ENGINES.pdf2img = (tool, root) => {
   const grid = el("div", { class: "grid2" });
   const left = el("div"), right = outColumn("Pages");
   right.body.appendChild(placeholder("No images yet", "Load a PDF to render each page."));
-  let file = null;
+  let file = null, pages = []; // pages: {blob, name, url}
   const dz = dropzone({ accept: ".pdf", label: "Drop a PDF or click to browse",
     onFiles: (f) => { file = f[0]; renderLeft(); } });
   const btn = runButton("Render pages");
   const prog = el("div", { class: "progress", style: "display:none" }, `<div class="plog"></div><div class="bar"><i></i></div>`);
+  const releasePages = () => { pages.forEach((p) => URL.revokeObjectURL(p.url)); pages = []; };
   btn.addEventListener("click", async () => {
     if (!file) return;
     prog.style.display = ""; const log = prog.querySelector(".plog"), bar = prog.querySelector(".bar > i");
+    log.innerHTML = "";
     const put = (m) => { log.appendChild(el("div", {}, "› " + m)); log.scrollTop = log.scrollHeight; };
     btn.setBusy(true, "Rendering…"); setRuntime("busy", "rendering pages…");
+    releasePages();
     try {
-      const [pdfjs, JSZip] = await Promise.all([ensurePdfjs(), ensureJSZip()]);
+      const pdfjs = await ensurePdfjs();
       put("opening document…");
       const data = new Uint8Array(await readBuf(file));
       const doc = await pdfjs.getDocument({ data }).promise;
-      const zip = new JSZip(); const thumbs = [];
       for (let i = 1; i <= doc.numPages; i++) {
         put(`page ${i} / ${doc.numPages}`); bar.style.width = Math.round((i / doc.numPages) * 100) + "%";
         const page = await doc.getPage(i);
         const vp = page.getViewport({ scale: 2 });
         const c = el("canvas"); c.width = vp.width; c.height = vp.height;
-        await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height); // JPEG has no alpha
+        await page.render({ canvasContext: ctx, viewport: vp }).promise;
         const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.9));
-        zip.file(`page_${String(i).padStart(3, "0")}.jpg`, blob);
-        thumbs.push(c.toDataURL("image/jpeg", 0.7));
+        pages.push({ blob, name: `${stem(file.name)}_page_${String(i).padStart(3, "0")}.jpg`, url: URL.createObjectURL(blob) });
+        c.width = 0; c.height = 0; // release canvas memory promptly on big documents
       }
-      put("packing zip…");
-      const zipBlob = await zip.generateAsync({ type: "blob" });
-      right.body.innerHTML = "";
-      const dlBtn = el("button", { class: "btn-dl", type: "button", style: "margin-bottom:14px", onclick: () => download(zipBlob, `${stem(file.name)}_images.zip`, MIME.zip) }, `${I.dl} Download ${doc.numPages} images (zip)`);
-      right.body.appendChild(dlBtn);
-      const gal = el("div", { class: "gallery" });
-      thumbs.forEach((src, i) => gal.appendChild(el("figure", {}, `<img src="${src}" alt="Page ${i + 1}"><figcaption>page ${i + 1}</figcaption>`)));
-      right.body.appendChild(gal);
+      put("done.");
+      renderResult();
     } catch (err) { showError(right.body, err); }
     finally { btn.setBusy(false); prog.style.display = "none"; if (engineReady) setRuntime("ready", "ready · on-device"); }
   });
+
+  function renderResult() {
+    right.body.innerHTML = "";
+    const total = pages.reduce((n, p) => n + p.blob.size, 0);
+    right.body.appendChild(el("p", { class: "engine-hint" },
+      `${I.check} ${pages.length} page${pages.length === 1 ? "" : "s"} rendered · ${fmtBytes(total)} — download the whole set, or just the pages you want.`));
+
+    const zipBtn = el("button", { class: "btn-dl", type: "button", style: "margin-top:12px" },
+      `${I.dl} Download all as zip`);
+    zipBtn.addEventListener("click", async () => {
+      const label = zipBtn.innerHTML;
+      zipBtn.disabled = true; zipBtn.innerHTML = `<span class="spin">${I.spin}</span>packing zip…`;
+      try {
+        const JSZip = await ensureJSZip();
+        const zip = new JSZip();
+        pages.forEach((p) => zip.file(p.name, p.blob));
+        download(await zip.generateAsync({ type: "blob" }), `${stem(file.name)}_images.zip`, MIME.zip);
+      } catch (err) { showError(right.body, err); }
+      finally { zipBtn.disabled = false; zipBtn.innerHTML = label; }
+    });
+    right.body.appendChild(zipBtn);
+
+    const eachBtn = el("button", { class: "btn-dl", type: "button", style: "margin-top:8px" },
+      `${I.dl} Save all ${pages.length} separately`);
+    eachBtn.addEventListener("click", async () => {
+      eachBtn.disabled = true;
+      // one download per file, spaced out — browsers drop a burst of them
+      for (const p of pages) {
+        download(p.blob, p.name, "image/jpeg");
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      eachBtn.disabled = false;
+    });
+    right.body.appendChild(eachBtn);
+    if (pages.length > 5)
+      right.body.appendChild(el("p", { class: "engine-hint" },
+        `${I.alert} Saving ${pages.length} files separately — your browser will ask once to allow multiple downloads.`));
+
+    const gal = el("div", { class: "gallery", style: "margin-top:14px" });
+    pages.forEach((p, i) => {
+      const fig = el("figure", {}, `<img src="${p.url}" alt="Page ${i + 1}" loading="lazy">`);
+      fig.appendChild(el("button", { class: "gdl", type: "button", title: `Download page ${i + 1}`,
+        "aria-label": `Download page ${i + 1}`, onclick: () => download(p.blob, p.name, "image/jpeg") }, I.dl));
+      fig.appendChild(el("figcaption", {}, `page ${i + 1} · ${fmtBytes(p.blob.size)}`));
+      gal.appendChild(fig);
+    });
+    right.body.appendChild(gal);
+  }
+
   function renderLeft() {
     left.innerHTML = ""; left.appendChild(dz);
-    if (file) { const files = el("div", { class: "files" }); files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } })); left.appendChild(files); left.appendChild(btn); left.appendChild(prog); }
+    if (file) { const files = el("div", { class: "files" }); files.appendChild(fileChip(file, { onRemove: () => { file = null; releasePages(); renderLeft(); } })); left.appendChild(files); left.appendChild(btn); left.appendChild(prog); }
   }
   renderLeft();
   grid.append(left, right); root.appendChild(grid);

@@ -349,9 +349,15 @@ h1, h2, h3 { margin: 0; font-family: var(--display); font-weight: 400; letter-sp
 
 /* gallery (pdf -> images) */
 .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; max-height: 400px; overflow: auto; }
-.gallery figure { margin: 0; border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.gallery figure { position: relative; margin: 0; border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden; background: var(--surface); }
 .gallery img { display: block; width: 100%; height: auto; }
 .gallery figcaption { font-family: var(--mono); font-size: 10px; color: var(--ink-3); padding: 5px 8px; text-align: center; }
+/* per-page download — always visible, since hover doesn't exist on touch */
+.gallery .gdl { position: absolute; top: 5px; right: 5px; width: 26px; height: 26px; border-radius: 7px;
+  border: 1px solid var(--line-2); background: rgba(251,243,220,.94); color: var(--ink);
+  display: grid; place-items: center; box-shadow: var(--shadow); }
+.gallery .gdl:hover { background: #fff; color: var(--sindoor); border-color: var(--sindoor); }
+.gallery .gdl svg { width: 13px; height: 13px; }
 
 /* thumbnails (organize) */
 .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 12px; }
