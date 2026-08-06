@@ -50,7 +50,6 @@ const I = {
   doc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v5h5"/><path d="M6 2h9l5 5v13H6z"/><path d="M9 13h6M9 17h4"/></svg>',
   swap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>',
   outof: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3v5h5"/><path d="M20 12V8l-5-5H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h6"/><path d="M14 18h7l-2.5-2.5M21 18l-2.5 2.5"/></svg>',
-  shrink: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M12 8v8" opacity=".35"/><path d="M9 9l6 6M15 9l-6 6"/></svg>',
 };
 const CATICON = {
   "Assemble": I.layers,
