@@ -263,7 +263,7 @@ function renderServices() {
 const TOOLS = [
   { group: "Assemble" },
   { id: "merge", name: "Merge PDFs", badge: "PYTHON",
-    desc: "Combine several PDFs into one. Drag to set the order.",
+    desc: "Combine several PDFs into one. Drag or use the arrows to order them.",
     engine: "merge", accept: ".pdf", multiple: true },
   { id: "split", name: "Split PDF", badge: "PYTHON",
     desc: "Keep a single range of pages as a new document.",
@@ -376,7 +376,7 @@ const TOOLLIST = [];
 
 function buildIndex() {
   ["All", ...CATS].forEach((c, i) => {
-    const b = el("button", { class: "pill", type: "button", role: "tab",
+    const b = el("button", { class: "pill", type: "button",
       "data-cat": c, "aria-current": i === 0 ? "true" : "false",
       onclick: () => {
         activeCat = c;
@@ -432,12 +432,36 @@ function renderToolHead(t) {
     `<div><h2>${t.name}</h2><p>${t.desc}</p></div>
      <span class="badge ${local ? "local" : ""}">${t.badge}</span>`);
 }
+/* A control and its caption. The <label> must be tied to the control by id or
+   the control has no accessible name (WCAG 1.3.1, 4.1.2) — a bare <label> next
+   to a <select> names nothing. `target` is the control the label points at;
+   anything after it is appended in order. */
+let fieldSeq = 0;
+function labelled(labelHtml, target, ...rest) {
+  const f = el("div", { class: "field" });
+  const id = `pf-${++fieldSeq}`;
+  if (target) target.id = id;
+  f.appendChild(el("label", { for: id }, labelHtml));
+  if (target) f.appendChild(target);
+  rest.forEach((x) => x && f.appendChild(x));
+  return f;
+}
+/* Same caption over a set of controls with no single input to name. */
+function grouped(labelHtml, groupNode) {
+  const f = el("div", { class: "field" });
+  f.appendChild(el("span", { class: "cap" }, labelHtml));
+  groupNode.setAttribute("role", "group");
+  groupNode.setAttribute("aria-label", String(labelHtml).replace(/<[^>]*>/g, "").trim());
+  f.appendChild(groupNode);
+  return f;
+}
 function dropzone({ accept, multiple, label, onFiles }) {
   const input = el("input", { type: "file", accept, class: "sr", ...(multiple ? { multiple: "" } : {}) });
   input.addEventListener("change", () => { if (input.files.length) onFiles([...input.files]); input.value = ""; });
-  const dz = el("div", { class: "drop", role: "button", tabindex: "0",
-    onclick: () => input.click(),
-    onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); } } },
+  // A <label> wrapping the input gives native click + keyboard activation and
+  // names the input from its own text. div[role=button] around a focusable
+  // input is nested-interactive, and left the file input with no name at all.
+  const dz = el("label", { class: "drop" },
     `<span class="di">${I.up}</span><strong>${label || "Drop a file or click to browse"}</strong>
      <span class="hint">${(accept || "any").replace(/\./g, "").toUpperCase()} · stays on your device</span>`);
   dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.classList.add("drag"); });
@@ -450,11 +474,20 @@ function dropzone({ accept, multiple, label, onFiles }) {
   dz.appendChild(input);
   return dz;
 }
-function fileChip(file, { onRemove, draggable } = {}) {
+function fileChip(file, { onRemove, draggable, onUp, onDown } = {}) {
   const chip = el("div", { class: "file", ...(draggable ? { draggable: "true" } : {}) },
     `${draggable ? `<span class="drag-h">${I.grip}</span>` : ""}
      <span class="fi">${I.file}</span>
      <span class="meta"><span class="name">${file.name}</span><span class="sub">${fmtBytes(file.size)}</span></span>`);
+  // dragging alone fails WCAG 2.2 SC 2.5.7 — every reorder needs a plain-click path
+  if (onUp || onDown) {
+    const nav = el("div", { class: "chip-nav" });
+    nav.appendChild(el("button", { class: "cx", type: "button", "aria-label": `Move ${file.name} up`,
+      ...(onUp ? {} : { disabled: "" }), onclick: onUp || (() => {}) }, "▲"));
+    nav.appendChild(el("button", { class: "cx", type: "button", "aria-label": `Move ${file.name} down`,
+      ...(onDown ? {} : { disabled: "" }), onclick: onDown || (() => {}) }, "▼"));
+    chip.appendChild(nav);
+  }
   if (onRemove) {
     const x = el("button", { class: "x", type: "button", "aria-label": "Remove", onclick: onRemove }, I.x);
     chip.appendChild(x);
@@ -565,10 +598,7 @@ ENGINES.convert = (tool, root) => {
       left.appendChild(list);
     }
     if (tool.rangeOption && files.length) {
-      const field = el("div", { class: "field" },
-        `<label>Page range · optional — much faster for large documents</label>`);
-      field.appendChild(rangeI);
-      left.appendChild(field);
+      left.appendChild(labelled("Page range · optional — much faster for large documents", rangeI));
     }
     left.appendChild(btn);
     if (tool.printView && files.length === 1) {
@@ -622,15 +652,13 @@ ENGINES.stamp = (tool, root) => {
     const files = el("div", { class: "files" });
     files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } }));
     left.appendChild(files);
-    const f1 = el("div", { class: "field" }, `<label>Stamp text</label>`);
-    f1.appendChild(textI); left.appendChild(f1);
-    const f2 = el("div", { class: "field" }, `<label>Placement</label>`);
+    left.appendChild(labelled("Stamp text", textI));
     const sel = el("select", { class: "input", onchange: (e) => pos = e.target.value },
       `<option value="diagonal">Diagonal watermark</option>
        <option value="header">Header (top, small)</option>
        <option value="footer">Footer (bottom, small)</option>`);
     sel.value = pos;
-    f2.appendChild(sel); left.appendChild(f2);
+    left.appendChild(labelled("Placement", sel));
     const f3 = el("label", { class: "engine-hint", for: "pgnum", style: "cursor:pointer" });
     f3.appendChild(numC);
     f3.appendChild(document.createTextNode(" Add “Page x of y” to every page"));
@@ -650,7 +678,7 @@ ENGINES.qpdf = (tool, root) => {
   const dz = dropzone({ accept: ".pdf", label: "Drop a PDF or click to browse",
     onFiles: (f) => { file = f[0]; renderLeft(); } });
   const pw = el("input", { class: "input mono", type: "password", placeholder: "Password", autocomplete: "new-password" });
-  const pw2 = el("input", { class: "input mono", type: "password", placeholder: "Repeat password", autocomplete: "new-password", style: "margin-top:8px" });
+  const pw2 = el("input", { class: "input mono", type: "password", placeholder: "Repeat password", "aria-label": "Repeat password", autocomplete: "new-password", style: "margin-top:8px" });
   const btn = runButton(tool.name, { free: true });
   btn.addEventListener("click", async () => {
     if (!file) return;
@@ -676,11 +704,9 @@ ENGINES.qpdf = (tool, root) => {
       files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } }));
       left.appendChild(files);
       if (tool.qpdf === "encrypt" || tool.qpdf === "decrypt") {
-        const field = el("div", { class: "field" },
-          `<label>${tool.qpdf === "encrypt" ? "Set a password · AES-256" : "Current password"}</label>`);
-        field.appendChild(pw);
-        if (tool.qpdf === "encrypt") field.appendChild(pw2);
-        left.appendChild(field);
+        left.appendChild(labelled(
+          tool.qpdf === "encrypt" ? "Set a password · AES-256" : "Current password",
+          pw, tool.qpdf === "encrypt" ? pw2 : null));
       }
       left.appendChild(btn);
     }
@@ -788,8 +814,11 @@ ENGINES.merge = (tool, root) => {
     left.innerHTML = ""; left.appendChild(dz);
     if (files.length) {
       const list = el("div", { class: "files" });
+      const move = (from, to) => { const [m] = files.splice(from, 1); files.splice(to, 0, m); renderLeft(); };
       files.forEach((f, i) => {
-        const chip = fileChip(f, { draggable: true, onRemove: () => { files.splice(i, 1); renderLeft(); } });
+        const chip = fileChip(f, { draggable: true, onRemove: () => { files.splice(i, 1); renderLeft(); },
+          onUp: i > 0 ? () => move(i, i - 1) : null,
+          onDown: i < files.length - 1 ? () => move(i, i + 1) : null });
         chip.addEventListener("dragstart", () => { dragIdx = i; chip.classList.add("dragging"); });
         chip.addEventListener("dragend", () => chip.classList.remove("dragging"));
         chip.addEventListener("dragover", (e) => e.preventDefault());
@@ -814,8 +843,8 @@ ENGINES.range = (tool, root) => {
   const dz = dropzone({ accept: ".pdf", label: "Drop a PDF or click to browse",
     onFiles: async (f) => { file = f[0]; pages = 0; renderLeft();
       try { const r = await callEngine("pageCount", {}, [await readBuf(file)]); pages = r.data.pages; renderLeft(); } catch {} } });
-  const startI = el("input", { type: "number", min: "1", value: "1" });
-  const endI = el("input", { type: "number", min: "1", value: "1" });
+  const startI = el("input", { type: "number", min: "1", value: "1", "aria-label": "First page" });
+  const endI = el("input", { type: "number", min: "1", value: "1", "aria-label": "Last page" });
   const everyI = el("input", { class: "input mono", type: "number", min: "1", value: "10" });
   const rangesI = el("input", { class: "input mono", type: "text", placeholder: "e.g. 1-3, 7, 9-12" });
   const btn = runButton("Split PDF");
@@ -849,24 +878,21 @@ ENGINES.range = (tool, root) => {
     const files = el("div", { class: "files" });
     files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } }));
     left.appendChild(files);
-    const fm = el("div", { class: "field" }, `<label>Split mode${pages ? ` · ${pages} pages total` : ""}</label>`);
     const sel = el("select", { class: "input", onchange: (e) => { mode = e.target.value; renderLeft(); } },
       `<option value="single">Keep one range</option>
        <option value="every">Every N pages → zip</option>
        <option value="ranges">Several ranges → zip</option>`);
     sel.value = mode;
-    fm.appendChild(sel); left.appendChild(fm);
+    left.appendChild(labelled(`Split mode${pages ? ` · ${pages} pages total` : ""}`, sel));
     if (mode === "single") {
-      const field = el("div", { class: "field" }, `<label>Page range</label>`);
       const row = el("div", { class: "row-inputs" });
       if (pages) { startI.max = pages; endI.max = pages; if (+endI.value < 2) endI.value = pages; }
-      row.append(startI, el("span", {}, "to"), endI); field.appendChild(row); left.appendChild(field);
+      row.append(startI, el("span", {}, "to"), endI);
+      left.appendChild(grouped("Page range", row));
     } else if (mode === "every") {
-      const field = el("div", { class: "field" }, `<label>Pages per file</label>`);
-      field.appendChild(everyI); left.appendChild(field);
+      left.appendChild(labelled("Pages per file", everyI));
     } else {
-      const field = el("div", { class: "field" }, `<label>Ranges — one PDF per comma-separated chunk</label>`);
-      field.appendChild(rangesI); left.appendChild(field);
+      left.appendChild(labelled("Ranges — one PDF per comma-separated chunk", rangesI));
     }
     left.appendChild(btn);
   }
@@ -902,8 +928,8 @@ ENGINES.delete = (tool, root) => {
       const files = el("div", { class: "files" });
       files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } }));
       left.appendChild(files);
-      const field = el("div", { class: "field" }, `<label>Pages to remove${pages ? ` · ${pages} total` : ""}</label>`);
-      field.appendChild(inp); left.appendChild(field); left.appendChild(btn);
+      left.appendChild(labelled(`Pages to remove${pages ? ` · ${pages} total` : ""}`, inp));
+      left.appendChild(btn);
     }
   }
   renderLeft();
@@ -966,7 +992,6 @@ ENGINES.compress = (tool, root) => {
       const list = el("div", { class: "files" });
       files.forEach((f, i) => list.appendChild(fileChip(f, { onRemove: () => { files.splice(i, 1); renderLeft(); } })));
       left.appendChild(list);
-      const field = el("div", { class: "field" }, `<label>Optimization level</label>`);
       const opts = el("div", { class: "options" });
       levels.forEach((lv) => {
         const o = el("button", { class: "opt", type: "button", "aria-pressed": String(lv.v === quality),
@@ -974,7 +999,7 @@ ENGINES.compress = (tool, root) => {
           `<div class="ot">${lv.t}</div><div class="on">${lv.n}</div><div class="od">${lv.d}</div>`);
         opts.appendChild(o);
       });
-      field.appendChild(opts); left.appendChild(field);
+      left.appendChild(grouped("Optimization level", opts));
       btn.baseLabel = (quality === "max" && !engineOk("compress-max"))
         ? "Download engine (~17 MB) & compress" : "Compress";
       btn.setBusy(false);
@@ -1025,7 +1050,7 @@ ENGINES.compose = (tool, root) => {
   right.body.appendChild(placeholder("Nothing yet", "Type some text and export."));
   const ta = el("textarea", { class: "textarea", placeholder: "Type or paste text here…" });
   ta.value = "Untitled note\n\nStart writing. Line breaks and paragraphs are preserved.";
-  const loadInput = el("input", { type: "file", accept: ".txt,.md,.csv", class: "sr" });
+  const loadInput = el("input", { type: "file", accept: ".txt,.md,.csv", class: "sr", "aria-label": "Load a text file" });
   loadInput.addEventListener("change", async () => { if (loadInput.files[0]) { ta.value = await loadInput.files[0].text(); } loadInput.value = ""; });
   const loadBtn = el("button", { class: "tbtn", type: "button", onclick: () => loadInput.click() }, `${I.file} Load .txt`);
   const btn = runButton("Export PDF");
@@ -1041,7 +1066,8 @@ ENGINES.compose = (tool, root) => {
     } catch (err) { showError(right.body, err); }
   });
   const field = el("div", { class: "field" });
-  const lbl = el("label", {}, "Content"); field.appendChild(lbl);
+  ta.id = "pf-content";
+  const lbl = el("label", { for: "pf-content" }, "Content"); field.appendChild(lbl);
   const head = el("div", { class: "tool-actions", style: "margin-bottom:8px" }); head.appendChild(loadBtn);
   field.append(head, ta, loadInput);
   left.append(field, btn);
@@ -1103,18 +1129,20 @@ ENGINES.images = (tool, root) => {
     left.innerHTML = ""; left.appendChild(dz);
     if (files.length) {
       const list = el("div", { class: "files" });
+      const move = (from, to) => { const [m] = files.splice(from, 1); files.splice(to, 0, m); renderLeft(); };
       files.forEach((f, i) => {
-        const chip = fileChip(f, { draggable: true, onRemove: () => { files.splice(i, 1); renderLeft(); } });
+        const chip = fileChip(f, { draggable: true, onRemove: () => { files.splice(i, 1); renderLeft(); },
+          onUp: i > 0 ? () => move(i, i - 1) : null,
+          onDown: i < files.length - 1 ? () => move(i, i + 1) : null });
         chip.addEventListener("dragstart", () => dragIdx = i);
         chip.addEventListener("dragover", (e) => e.preventDefault());
         chip.addEventListener("drop", (e) => { e.preventDefault(); if (dragIdx === null || dragIdx === i) return; const [m] = files.splice(dragIdx, 1); files.splice(i, 0, m); dragIdx = null; renderLeft(); });
         list.appendChild(chip);
       });
       left.appendChild(list);
-      const field = el("div", { class: "field" }, `<label>Page size</label>`);
       const sel = el("select", { class: "input", onchange: (e) => size = e.target.value },
         `<option value="letter">Letter</option><option value="a4">A4</option>`);
-      field.appendChild(sel); left.appendChild(field); left.appendChild(btn);
+      left.appendChild(labelled("Page size", sel)); left.appendChild(btn);
     }
   }
   renderLeft();
@@ -1161,8 +1189,13 @@ ENGINES.organize = (tool, root) => {
       const cell = el("div", { class: "thumb", draggable: "true" });
       cell.appendChild(el("span", { class: "tnum" }, String(i + 1)));
       const ctl = el("div", { class: "tctl" });
-      ctl.appendChild(el("button", { type: "button", title: "Rotate", onclick: () => { t.rot = (t.rot + 90) % 360; paint(cell.querySelector("canvas"), t.rot); } }, I.rot));
-      ctl.appendChild(el("button", { class: "del", type: "button", title: "Remove", onclick: () => { thumbs.splice(i, 1); renderBoard(); } }, I.trash));
+      const shift = (to) => { const [m] = thumbs.splice(i, 1); thumbs.splice(to, 0, m); renderBoard(); };
+      ctl.appendChild(el("button", { type: "button", title: "Move earlier", "aria-label": `Move page ${i + 1} earlier`,
+        ...(i > 0 ? {} : { disabled: "" }), onclick: () => shift(i - 1) }, "◀"));
+      ctl.appendChild(el("button", { type: "button", title: "Move later", "aria-label": `Move page ${i + 1} later`,
+        ...(i < thumbs.length - 1 ? {} : { disabled: "" }), onclick: () => shift(i + 1) }, "▶"));
+      ctl.appendChild(el("button", { type: "button", title: "Rotate", "aria-label": `Rotate page ${i + 1}`, onclick: () => { t.rot = (t.rot + 90) % 360; paint(cell.querySelector("canvas"), t.rot); } }, I.rot));
+      ctl.appendChild(el("button", { class: "del", type: "button", title: "Remove", "aria-label": `Remove page ${i + 1}`, onclick: () => { thumbs.splice(i, 1); renderBoard(); } }, I.trash));
       cell.appendChild(ctl);
       const canvas = el("canvas");
       cell.appendChild(canvas);
@@ -1213,7 +1246,7 @@ ENGINES.imgOnPdf = (tool, root) => {
     onFiles: (f) => loadDoc(f[0]) });
   wrap.appendChild(dz);
 
-  const imgInput = el("input", { type: "file", accept: "image/*", multiple: "", class: "sr" });
+  const imgInput = el("input", { type: "file", accept: "image/*", multiple: "", class: "sr", "aria-label": "Choose an image to place on the page" });
   imgInput.addEventListener("change", async () => {
     const picked = [...imgInput.files]; imgInput.value = "";
     for (const f of picked) {
@@ -1575,10 +1608,10 @@ ENGINES.ocr = (tool, root) => {
       const files = el("div", { class: "files" });
       files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } }));
       left.appendChild(files);
-      const field = el("div", { class: "field" }, `<label>Document language</label>`);
       const sel = el("select", { class: "input", onchange: (e) => lang = e.target.value },
-        `<option value="eng">English</option><option value="hin">हिन्दी Hindi</option><option value="eng+hin">English + Hindi</option><option value="spa">Spanish</option><option value="fra">French</option><option value="deu">German</option><option value="ita">Italian</option><option value="por">Portuguese</option>`);
-      field.appendChild(sel); left.appendChild(field); left.appendChild(btn); left.appendChild(prog);
+        `<option value="eng">English</option><option value="hin" lang="hi">हिन्दी Hindi</option><option value="eng+hin">English + Hindi</option><option value="spa">Spanish</option><option value="fra">French</option><option value="deu">German</option><option value="ita">Italian</option><option value="por">Portuguese</option>`);
+      left.appendChild(labelled("Document language", sel));
+      left.appendChild(btn); left.appendChild(prog);
     }
   }
   renderLeft();
