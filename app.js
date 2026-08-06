@@ -49,6 +49,8 @@ const I = {
   min: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9L4 4M9 9V5M9 9H5M15 15l5 5M15 15v4M15 15h4"/></svg>',
   doc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v5h5"/><path d="M6 2h9l5 5v13H6z"/><path d="M9 13h6M9 17h4"/></svg>',
   swap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>',
+  outof: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3v5h5"/><path d="M20 12V8l-5-5H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h6"/><path d="M14 18h7l-2.5-2.5M21 18l-2.5 2.5"/></svg>',
+  shrink: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M12 8v8" opacity=".35"/><path d="M9 9l6 6M15 9l-6 6"/></svg>',
 };
 const CATICON = {
   "Assemble": I.layers,
@@ -56,7 +58,7 @@ const CATICON = {
   "Protect & repair": I.shield,
   "Extract": I.doc,
   "Convert to PDF": I.swap,
-  "Convert from PDF": I.swap,
+  "Convert from PDF": I.outof,
 };
 const MIME = {
   pdf: "application/pdf",
@@ -390,8 +392,9 @@ function buildIndex() {
       "data-cat": t._cat, "data-search": (t.name + " " + t._cat + " " + t.desc + " " + (t.keys || "")).toLowerCase(),
       onclick: () => selectTool(t.id) },
       `<span class="fol">${t._code}</span>
-       <span class="ico">${CATICON[t._cat] || I.doc}</span>
+       <span class="ico" aria-hidden="true">${CATICON[t._cat] || I.doc}</span>
        <span class="nm">${t.name}</span>
+       <span class="sr">${t._cat}</span>
        <span class="ds">${t.desc}</span>`);
     gridEl.appendChild(card);
   });
@@ -478,7 +481,7 @@ function fileChip(file, { onRemove, draggable, onUp, onDown } = {}) {
   const chip = el("div", { class: "file", ...(draggable ? { draggable: "true" } : {}) },
     `${draggable ? `<span class="drag-h">${I.grip}</span>` : ""}
      <span class="fi">${I.file}</span>
-     <span class="meta"><span class="name">${file.name}</span><span class="sub">${fmtBytes(file.size)}</span></span>`);
+     <span class="meta"><span class="name" title="${escapeAttr(file.name)}">${file.name}</span><span class="sub">${fmtBytes(file.size)}</span></span>`);
   // dragging alone fails WCAG 2.2 SC 2.5.7 — every reorder needs a plain-click path
   if (onUp || onDown) {
     const nav = el("div", { class: "chip-nav" });
@@ -1637,6 +1640,7 @@ function showError(container, err) {
   container.appendChild(alertBox(msg));
 }
 function escapeHtml(s) { return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+const escapeAttr = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 /* ---- welcome / boot readout --------------------------------------------- */
 function renderBoot(box) {
