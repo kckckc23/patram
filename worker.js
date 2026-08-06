@@ -13,6 +13,21 @@ const BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 // supported") — this file must run as a MODULE worker (see app.js) and load
 // the ESM build via dynamic import.
 
+// Versions are PINNED on purpose. Unpinned, micropip resolves "latest" from
+// pypi.org/simple/<pkg>/ at every cold boot — and because that index was cached
+// cache-first, each browser froze whatever it resolved on its first visit. A
+// pushed code update could then meet months-old wheels and throw at run time on
+// exactly the returning browsers, while working everywhere else. Pinning also
+// means two users converting the same file get the same result.
+// Keep in step with test/verify.mjs's install block (see CLAUDE.md).
+const BOOT_PACKAGES = [
+  "pypdf==6.15.0",
+  "openpyxl==3.1.5",
+  "fpdf2==2.8.7",
+  "python-docx==1.2.0",
+  "python-pptx==1.0.2",
+];
+
 let pyodide = null;
 
 async function boot() {
@@ -25,7 +40,7 @@ async function boot() {
 
   post("boot", { phase: "packages", msg: "Installing pypdf, openpyxl, fpdf2, python-docx, python-pptx…" });
   const micropip = pyodide.pyimport("micropip");
-  await micropip.install(["pypdf", "openpyxl", "fpdf2", "python-docx", "python-pptx"]);
+  await micropip.install(BOOT_PACKAGES);
 
   post("boot", { phase: "module", msg: "Loading engine…" });
   pyodide.runPython(await (await fetch("./pdf_tools.py")).text());
@@ -139,10 +154,20 @@ self.onmessage = async (e) => {
   }
 };
 
-// Surface the Python ValueError message, not the whole WASM traceback.
+// Surface the exception, not the whole WASM traceback. Our own ValueErrors win
+// (they are written as human sentences); otherwise take the LAST line, which is
+// where Python puts the exception. Reading the first line instead meant every
+// class without "Error" in its name — FPDFException, BadZipFile — surfaced to
+// the user as a bare "Traceback (most recent call last):".
 function humanize(s) {
-  const m = s.match(/ValueError:\s*(.+)/) || s.match(/Error:\s*(.+)/);
-  return m ? m[1].split("\n")[0] : s.split("\n")[0];
+  const own = String(s).match(/ValueError:\s*(.+)/);
+  if (own) return own[1].split("\n")[0];
+  const lines = String(s).trim().split("\n").filter((l) => l.trim());
+  const last = lines[lines.length - 1] || String(s);
+  // "fpdf.errors.FPDFException: Undefined font: x" → "FPDFException: Undefined font: x"
+  const m = last.match(/^(?:[\w.]+\.)?([A-Za-z_]\w*):\s*(.+)$/);
+  if (!m) return last.slice(0, 300);
+  return (m[1] === "Error" ? m[2] : `${m[1]}: ${m[2]}`).slice(0, 300);
 }
 
 function post(type, payload, transfer) {

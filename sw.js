@@ -7,7 +7,7 @@
  * responses are stored (opaque responses are quota-padded and unusable under
  * a future cross-origin-isolated deployment).
  */
-const VERSION = "patram-sw-v5";
+const VERSION = "patram-sw-v6";
 const CORE = [
   "./", "./index.html", "./styles.css", "./app.js", "./favicon.svg",
   "./manifest.webmanifest",
@@ -47,7 +47,14 @@ self.addEventListener("fetch", (e) => {
   // Left un-intercepted they behave exactly as before this SW existed.
   if (!sameOrigin && req.mode !== "cors") return;
 
-  const isEngineAsset = !sameOrigin || url.pathname.includes("/fonts/");
+  // pypi.org/simple/<pkg>/ is a MUTABLE index — cache-first froze every browser
+  // on the package versions it resolved on its first visit, so a later code push
+  // could meet stale wheels and fail at run time. Network-first keeps it current
+  // and still falls back to cache, so offline installs keep working.
+  // Wheel URLs on files.pythonhosted.org are content-addressed, so they stay
+  // cache-first: immutable by construction.
+  const mutableIndex = url.hostname === "pypi.org";
+  const isEngineAsset = !mutableIndex && (!sameOrigin || url.pathname.includes("/fonts/"));
   e.respondWith(isEngineAsset ? cacheFirst(req) : networkFirst(req));
 });
 

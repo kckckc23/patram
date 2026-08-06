@@ -99,6 +99,12 @@ app.js (UI controller, single file, no framework)
   (`PYODIDE_VERSION`), `test/verify.mjs` (`CDN`), `test/package.json` (npm `pyodide`).
 - **Boot package lists must match** between `worker.js boot()` and verify.mjs's
   install block; heavy-engine recipes must match `ENGINE_SETUP` ↔ verify's `--full`.
+- **Package versions are pinned and must stay in step**: `worker.js BOOT_PACKAGES`
+  ↔ verify.mjs's `micropip.install`. Unpinned, micropip resolves latest from
+  `pypi.org/simple/`, which the SW once cached cache-first — every browser froze
+  the versions it first saw, so a code push could meet months-old wheels and throw
+  only for returning users. `pypi.org` is network-first for that reason; wheel URLs
+  on files.pythonhosted.org are content-addressed and stay cache-first.
 - **Service worker rules**: never `respondWith()` for cross-origin non-cors requests
   (Chrome rejects SW-served responses for them — bricks engine boot). Instead make
   every engine load cors-capable at the source: `<script crossorigin>`, qpdf glue via

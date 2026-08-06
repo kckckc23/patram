@@ -21,8 +21,9 @@ const wheel = (n) => CDN + lock.packages[n.toLowerCase()].file_name;
 // Pyodide-built deps (browser gets these from the CDN automatically):
 await py.loadPackage(["micropip", "pillow", "lxml", "fonttools", "typing-extensions"].map(wheel));
 const micropip = py.pyimport("micropip");
-// pure-Python packages, from PyPI:
-await micropip.install(["pypdf", "openpyxl", "fpdf2", "python-docx", "python-pptx"]);
+// pure-Python packages, from PyPI — pinned, and must match worker.js BOOT_PACKAGES
+await micropip.install(["pypdf==6.15.0", "openpyxl==3.1.5", "fpdf2==2.8.7",
+                        "python-docx==1.2.0", "python-pptx==1.0.2"]);
 ok("all packages installed in WASM");
 
 step("Loading pdf_tools.py…");
