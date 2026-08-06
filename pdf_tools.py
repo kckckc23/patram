@@ -298,6 +298,61 @@ def ocr_overlay(data: bytes, pages) -> bytes:
     return _overlay_merge(data, draw)
 
 
+def place_images(data: bytes, images, placements) -> bytes:
+    """Composite user-positioned images onto existing pages.
+
+    placements: [{img, page, x, y, w, h}] — `img` indexes `images`, `page` is
+    0-based, and x/y/w/h are fractions of the page box with the origin at the
+    top-left corner. Fractions (not points) are what the UI drags in, so the
+    same numbers land identically on a Letter page and an A3 one.
+    """
+    from PIL import Image
+
+    if not placements:
+        raise ValueError("Place at least one image on a page first.")
+    if not images:
+        raise ValueError("Add an image to place on the page.")
+
+    pil = []
+    for raw in images:
+        try:
+            im = Image.open(io.BytesIO(raw))
+            im.load()
+        except Exception:
+            raise ValueError("One of those images couldn't be read — try a JPG or PNG.")
+        if im.mode in ("P", "PA", "LA"):
+            im = im.convert("RGBA")           # keep transparency (logos, signatures)
+        elif im.mode not in ("RGB", "RGBA", "L"):
+            im = im.convert("RGB")            # CMYK, I;16, …
+        pil.append(im)
+
+    by_page = {}
+    for pl in placements:
+        idx = int(pl.get("img", 0))
+        if not 0 <= idx < len(pil):
+            continue
+        pw = max(0.0, min(1.0, float(pl.get("w", 0))))
+        ph = max(0.0, min(1.0, float(pl.get("h", 0))))
+        if pw <= 0 or ph <= 0:
+            continue
+        by_page.setdefault(int(pl.get("page", 0)), []).append({
+            "img": idx,
+            "x": max(0.0, min(1.0, float(pl.get("x", 0)))),
+            "y": max(0.0, min(1.0, float(pl.get("y", 0)))),
+            "w": pw,
+            "h": ph,
+        })
+    if not by_page:
+        raise ValueError("None of those placements were usable — try again.")
+
+    def draw(ov, i, w, h):
+        for pl in by_page.get(i, []):
+            ov.image(pil[pl["img"]], x=pl["x"] * w, y=pl["y"] * h,
+                     w=pl["w"] * w, h=pl["h"] * h)
+
+    return _overlay_merge(data, draw)
+
+
 def strip_metadata(data: bytes) -> bytes:
     """A privacy pass: drop the document info dictionary and XMP metadata."""
     reader = _reader(data)
@@ -840,6 +895,9 @@ def dispatch(action: str, params_json: str = "") -> str:
                         p.get("spec", ""))
     elif action == "ocrOverlay":
         out = ocr_overlay(files[0], p.get("pages") or [])
+    elif action == "placeImages":
+        # /in0 is the PDF, /in1… are the images the placements refer to
+        out = place_images(files[0], files[1:], p.get("placements") or [])
     elif action == "compress":
         if p.get("mode") == "max":
             out = compress_pdf_max(files[0], int(p.get("dpi", 110)),
