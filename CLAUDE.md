@@ -41,6 +41,9 @@ node verify.mjs --full     # also PyMuPDF / pdf2docx / pdfplumber (~40 MB, cache
 # browser tests (serve on :8231 first: python3 -m http.server 8231)
 node smoke.mjs             # boots real engine in Chromium, drives 3 tools
 node offline.mjs           # loads once, cuts network, reloads — engines must still work
+node ui.mjs                # UI matrix: every registered tool, light engine paths
+node ui.mjs --full         # + OCR / PDF→Word / PDF→Excel / Compress max
+node ui.mjs --only=merge   # a subset while iterating
 
 # fidelity benchmark (see test/fidelity/README.md)
 cd test/fidelity && node gen-corpus.mjs && node compare.mjs --self
@@ -87,6 +90,10 @@ app.js (UI controller, single file, no framework)
   page-size independent). Reuse it for anything drawn "onto" existing pages.
 - **Batch mode** is a UI-side loop: tools with `batch: true` accept many files, call
   the engine per file, and zip results with JSZip. Single file = unchanged behavior.
+- **Every registered tool needs a case in `test/ui.mjs`** — the matrix reads the
+  ids out of `TOOLS` and fails if one is uncovered (or if a case names a tool that
+  no longer exists), so a new tool cannot ship untested. Fixtures are built once
+  into `test/fixtures/` by `ui-fixtures.mjs` (gitignored).
 - **UI registry**: `TOOLS` entries → renderer from `ENGINES` keyed by `tool.engine`.
   Optional flags: `heavy {mb,label}` (size-consent + localStorage
   `patram-engine-ok:<id>`), `batch`, `rangeOption`, `printView`, `keys` (extra search

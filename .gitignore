@@ -4,3 +4,4 @@ node_modules/
 test/fidelity/corpus/
 test/fidelity/references/
 test/fidelity/scorecard.*
+test/fixtures/

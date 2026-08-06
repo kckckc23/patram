@@ -50,7 +50,6 @@ const I = {
   doc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v5h5"/><path d="M6 2h9l5 5v13H6z"/><path d="M9 13h6M9 17h4"/></svg>',
   swap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>',
   outof: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3v5h5"/><path d="M20 12V8l-5-5H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h6"/><path d="M14 18h7l-2.5-2.5M21 18l-2.5 2.5"/></svg>',
-  shrink: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M12 8v8" opacity=".35"/><path d="M9 9l6 6M15 9l-6 6"/></svg>',
 };
 const CATICON = {
   "Assemble": I.layers,
@@ -478,29 +477,31 @@ function renderNotes(data) {
     notesStage.appendChild(placeholder("Nothing published yet", "The first release will appear here."));
     return;
   }
-  const list = el("div", { class: "notes-list" });
-  releases.forEach((r) => {
-    const rel = el("article", { class: "release" });
-    const head = el("div", { class: "release-head" });
-    head.appendChild(el("h3", {}, escapeHtml(String(r.version))));
-    if (r.date) head.appendChild(el("time", { datetime: r.date }, fmtReleaseDate(r.date)));
-    if (String(r.version).toLowerCase() === "unreleased")
-      head.appendChild(el("span", { class: "rel-tag" }, "in progress"));
+  /* a folio timeline: one dot per release down a rail, newest first */
+  const tl = el("div", { class: "timeline" });
+  releases.forEach((r, i) => {
+    const version = String(r.version);
+    const rel = el("article", { class: "tl-release" });
+    const head = el("div", { class: "tl-head" });
+    head.appendChild(el("h3", { class: "tl-version" }, escapeHtml(version)));
+    if (r.date) head.appendChild(el("time", { class: "tl-date", datetime: r.date }, fmtReleaseDate(r.date)));
+    if (version.toLowerCase() === "unreleased") head.appendChild(el("span", { class: "rel-tag" }, "in progress"));
+    else if (i === 0) head.appendChild(el("span", { class: "rel-tag" }, "newest"));
     rel.appendChild(head);
     (r.groups || []).forEach((g) => {
-      rel.appendChild(el("h4", { class: "grp", "data-grp": g.title }, escapeHtml(g.title)));
-      const ul = el("ul", { class: "grp-list" });
+      rel.appendChild(el("h4", { class: "tl-grp", "data-grp": g.title }, escapeHtml(g.title)));
+      const ul = el("ul", { class: "tl-list" });
       (g.entries || []).forEach((e) => {
-        const li = el("li", {});
-        if (e.scope) li.appendChild(el("span", { class: "scope" }, escapeHtml(e.scope)));
-        li.appendChild(document.createTextNode(e.text || ""));
+        const li = el("li", { class: "tl-row", "data-grp": g.title });
+        li.appendChild(el("span", { class: "tl-tag" }, escapeHtml(e.scope || g.title.toLowerCase())));
+        li.appendChild(el("span", { class: "tl-text" }, escapeHtml(e.text || "")));
         ul.appendChild(li);
       });
       rel.appendChild(ul);
     });
-    list.appendChild(rel);
+    tl.appendChild(rel);
   });
-  notesStage.appendChild(list);
+  notesStage.appendChild(tl);
 }
 
 const MONTHS = ["January", "February", "March", "April", "May", "June",
@@ -614,191 +615,266 @@ function withBusy(btn, msg, fn) {
 }
 const readBuf = (file) => file.arrayBuffer();
 
+/* Batch mode is a UI-side loop: run the engine once per file and zip the
+   results. Progress goes onto the run button, as "(3/12) …". */
+async function runBatch({ files, btn, each, nameOf }) {
+  const JSZip = await ensureJSZip();
+  const zip = new JSZip();
+  let bytesTotal = 0;
+  for (let i = 0; i < files.length; i++) {
+    btn.setBusy(true, `file ${i + 1} / ${files.length} — ${files[i].name}`);
+    const bytes = await each(files[i], (msg) => btn.setBusy(true, `(${i + 1}/${files.length}) ${msg}`));
+    bytesTotal += bytes.byteLength || bytes.size || 0;
+    zip.file(nameOf(files[i]), bytes);
+  }
+  return { blob: await zip.generateAsync({ type: "blob" }), bytesTotal };
+}
+
+/* ---- the workbench ------------------------------------------------------- --
+   The shape almost every tool shares: a left column that takes files and
+   settings, a right column that shows the result. A renderer describes its
+   inputs (`fields`) and its work (`run`); the builder owns file state, the chip
+   list and its pointer reordering, the run button, busy/error handling and
+   result rendering.
+
+   spec:
+     accept, multiple, reorder, dropLabel   the file input (accept: null = none)
+     min, minMsg                            refuse to run below N files
+     resultTitle, emptyTitle, emptyHint     the output column
+     withActions                            header slot for copy/download buttons
+     runLabel, runBusy, free                the run button
+     onFiles(api)                           after files change (may be async)
+     fields(api) -> node | node[]           rebuilt on every state change
+     after(api)  -> node | node[]           notes below the run button
+     run(api) -> {bytes,name,mime,stats} | {text} | Node | undefined
+   Returning undefined means the renderer painted the result itself.          */
+function workbench(root, spec) {
+  const s = {
+    multiple: false, reorder: false, min: null, resultTitle: "Result",
+    emptyTitle: "Nothing yet", emptyHint: "Load a file and run it.",
+    runLabel: "Run", runBusy: "Working…", free: false, withActions: false, ...spec,
+  };
+  const grid = el("div", { class: "grid2" });
+  const left = el("div");
+  const actions = s.withActions ? el("div", { class: "tool-actions" }) : null;
+  const right = outColumn(s.resultTitle, actions);
+  const btn = runButton(s.runLabel, { free: s.free });
+  const api = { files: [], left, right, actions, btn, refresh, show, error, reset };
+
+  function reset() {
+    if (actions) actions.innerHTML = "";
+    right.body.innerHTML = "";
+    right.body.appendChild(placeholder(s.emptyTitle, s.emptyHint));
+  }
+  function show(result) {
+    right.body.innerHTML = "";
+    if (!result) return;
+    if (result instanceof Node) right.body.appendChild(result);
+    else if (typeof result.text === "string") right.body.appendChild(el("div", { class: "text-out" }, escapeHtml(result.text)));
+    else right.body.appendChild(resultCard(result));
+  }
+  function error(err) { showError(right.body, err); }
+
+  const dz = s.accept === null ? null : dropzone({
+    accept: s.accept, multiple: s.multiple, label: s.dropLabel,
+    onFiles: (picked) => {
+      api.files = s.multiple ? api.files.concat(picked) : [picked[0]];
+      refresh();
+      if (s.onFiles) Promise.resolve(s.onFiles(api)).then(refresh, () => {});
+    },
+  });
+
+  btn.addEventListener("click", async () => {
+    const need = s.min == null ? (dz ? 1 : 0) : s.min;
+    if (api.files.length < need) { if (need > 1) error(s.minMsg || `Add at least ${need} files.`); return; }
+    try {
+      await withBusy(btn, s.runBusy, async () => {
+        const out = await s.run(api);
+        if (out !== undefined) show(out);
+      });
+    } catch (err) { error(err); }
+  });
+
+  let dragIdx = null;
+  const move = (from, to) => { const [m] = api.files.splice(from, 1); api.files.splice(to, 0, m); refresh(); };
+  function refresh() {
+    left.innerHTML = "";
+    if (dz) left.appendChild(dz);
+    if (api.files.length) {
+      const list = el("div", { class: "files" });
+      api.files.forEach((f, i) => {
+        const chip = fileChip(f, {
+          draggable: s.reorder,
+          onRemove: () => { api.files.splice(i, 1); refresh(); },
+          onUp: s.reorder && i > 0 ? () => move(i, i - 1) : null,
+          onDown: s.reorder && i < api.files.length - 1 ? () => move(i, i + 1) : null,
+        });
+        if (s.reorder) {
+          chip.addEventListener("dragstart", () => { dragIdx = i; chip.classList.add("dragging"); });
+          chip.addEventListener("dragend", () => chip.classList.remove("dragging"));
+          chip.addEventListener("dragover", (e) => e.preventDefault());
+          chip.addEventListener("drop", (e) => {
+            e.preventDefault();
+            if (dragIdx === null || dragIdx === i) return;
+            const from = dragIdx; dragIdx = null; move(from, i);
+          });
+        }
+        list.appendChild(chip);
+      });
+      left.appendChild(list);
+    }
+    if (dz && !api.files.length) return;   // nothing to configure until a file is in
+    [].concat(s.fields ? s.fields(api) || [] : []).flat().filter(Boolean).forEach((nd) => left.appendChild(nd));
+    left.appendChild(btn);
+    [].concat(s.after ? s.after(api) || [] : []).flat().filter(Boolean).forEach((nd) => left.appendChild(nd));
+  }
+
+  reset();
+  refresh();
+  grid.append(left, right);
+  root.appendChild(grid);
+  return api;
+}
+
 /* ---- engine renderers ---------------------------------------------------- */
 const ENGINES = {};
 
 /* generic single-file → downloadable file (with heavy-engine consent) */
 ENGINES.convert = (tool, root) => {
-  const grid = el("div", { class: "grid2" });
-  const left = el("div"), right = outColumn("Result");
-  right.body.appendChild(placeholder("Nothing yet", "Load a file and run the conversion."));
-  let files = [];
-  const dz = dropzone({ accept: tool.accept, multiple: !!tool.batch,
-    label: tool.batch ? "Drop files or click to browse" : "Drop a file or click to browse",
-    onFiles: (f) => { files = tool.batch ? files.concat(f) : [f[0]]; renderLeft(); } });
-  const firstUse = () => tool.heavy && !engineOk(tool.id);
-  const btn = runButton(firstUse() ? `Download engine (~${tool.heavy.mb} MB) & convert` : "Convert");
   const rangeI = el("input", { class: "input mono", type: "text", placeholder: "e.g. 10-45 · empty = all pages" });
-  async function doRun(params) {
-    if (!files.length) return;
+  const firstUse = () => tool.heavy && !engineOk(tool.id);
+  const outName = (f) => stem(f.name) + (tool.suffix || "") + "." + tool.out;
+
+  /* one conversion — single file, or every file zipped */
+  async function convert(api, params) {
+    const { files, btn } = api;
     const m = rangeI.value.trim().match(/^(\d+)(?:\s*-\s*(\d+))?$/);
     if (tool.rangeOption && m) { params.start = +m[1]; params.end = +(m[2] || m[1]); }
     if (tool.heavy) requestPersistence();
-    try {
-      await withBusy(btn, "Converting…", async () => {
-        if (files.length === 1) {
-          const res = await callEngine(tool.action, params, [await readBuf(files[0])],
-            (msg) => btn.setBusy(true, msg));
-          if (tool.heavy) { engineMarkOk(tool.id); btn.baseLabel = "Convert"; }
-          const name = stem(files[0].name) + (tool.suffix || "") + "." + tool.out;
-          right.body.innerHTML = "";
-          right.body.appendChild(resultCard({
-            bytes: res.bytes, name, mime: MIME[tool.out],
-            stats: [["Output", fmtBytes(res.bytes.byteLength)]],
-          }));
-          return;
-        }
-        // batch: convert every file, deliver one zip
-        const JSZip = await ensureJSZip();
-        const zip = new JSZip();
-        for (let i = 0; i < files.length; i++) {
-          btn.setBusy(true, `file ${i + 1} / ${files.length} — ${files[i].name}`);
-          const res = await callEngine(tool.action, { ...params }, [await readBuf(files[i])],
-            (msg) => btn.setBusy(true, `(${i + 1}/${files.length}) ${msg}`));
-          zip.file(stem(files[i].name) + (tool.suffix || "") + "." + tool.out, res.bytes);
-        }
-        if (tool.heavy) { engineMarkOk(tool.id); btn.baseLabel = "Convert"; }
-        const blob = await zip.generateAsync({ type: "blob" });
-        right.body.innerHTML = "";
-        right.body.appendChild(resultCard({
-          bytes: blob, name: `${tool.id}_batch.zip`, mime: MIME.zip,
-          stats: [["Files", files.length], ["Output", fmtBytes(blob.size)]],
-        }));
-      });
-    } catch (err) {
-      showError(right.body, err);
-      if (files.length === 1 && tool.fallbackParams && params.engine !== tool.fallbackParams.engine) {
-        right.body.appendChild(el("button", { class: "tbtn", type: "button", style: "margin-top:10px",
-          onclick: () => { right.body.innerHTML = ""; right.body.appendChild(placeholder("Retrying…", "Using the basic extraction path.")); doRun({ ...tool.fallbackParams }); } },
-          `${I.swap} Try basic extraction instead`));
+    let out;
+    if (files.length === 1) {
+      const res = await callEngine(tool.action, params, [await readBuf(files[0])], (msg) => btn.setBusy(true, msg));
+      out = { bytes: res.bytes, name: outName(files[0]), mime: MIME[tool.out],
+              stats: [["Output", fmtBytes(res.bytes.byteLength)]] };
+    } else {
+      const b = await runBatch({ files, btn, nameOf: outName,
+        each: async (f, note) => (await callEngine(tool.action, { ...params }, [await readBuf(f)], note)).bytes });
+      out = { bytes: b.blob, name: `${tool.id}_batch.zip`, mime: MIME.zip,
+              stats: [["Files", files.length], ["Output", fmtBytes(b.blob.size)]] };
+    }
+    if (tool.heavy) { engineMarkOk(tool.id); btn.baseLabel = "Convert"; }
+    return out;
+  }
+
+  /* hi-fi engines can fail on a given document; offer the basic path by hand
+     rather than silently downgrading the result */
+  function fallbackButton(api) {
+    const b = el("button", { class: "tbtn", type: "button", style: "margin-top:10px" },
+      `${I.swap} Try basic extraction instead`);
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      try {
+        await withBusy(api.btn, "Retrying with basic extraction…",
+          async () => api.show(await convert(api, { ...tool.fallbackParams })));
+      } catch (err) { api.error(err); }
+    });
+    return b;
+  }
+
+  /* docx → styled HTML → the browser's own print engine */
+  function printViewControls(api, file) {
+    const pv = el("button", { class: "tbtn", type: "button", style: "margin-top:10px" },
+      `${I.doc} Full formatting — print view (choose “Save as PDF”)`);
+    pv.addEventListener("click", async () => {
+      try { pv.disabled = true; await printDocxView(file); }
+      catch (err) { api.error(err); }
+      finally { pv.disabled = false; }
+    });
+    return [pv, el("p", { class: "engine-hint" },
+      `${I.shield} The print view keeps bold, lists, tables and images, and uses your
+       browser's own print engine — pick “Save as PDF” in the dialog. Still fully on-device.`)];
+  }
+
+  workbench(root, {
+    accept: tool.accept, multiple: !!tool.batch,
+    dropLabel: tool.batch ? "Drop files or click to browse" : "Drop a file or click to browse",
+    emptyHint: "Load a file and run the conversion.",
+    runLabel: firstUse() ? `Download engine (~${tool.heavy.mb} MB) & convert` : "Convert",
+    runBusy: "Converting…",
+    fields: () => (tool.rangeOption
+      ? labelled("Page range · optional — much faster for large documents", rangeI) : null),
+    after: (api) => [
+      tool.printView && api.files.length === 1 ? printViewControls(api, api.files[0]) : null,
+      firstUse() ? engineHint(tool.heavy) : null,
+      tool.heavy && navigator.deviceMemory && navigator.deviceMemory <= 2
+        ? el("p", { class: "engine-hint" },
+            `${I.alert} This device reports limited memory — very large files may fail here.`)
+        : null,
+    ],
+    run: async (api) => {
+      try { return await convert(api, { ...(tool.params || {}) }); }
+      catch (err) {
+        api.error(err);
+        if (api.files.length === 1 && tool.fallbackParams) api.right.body.appendChild(fallbackButton(api));
+        return undefined;   // the alert is the result
       }
-    }
-  }
-  btn.addEventListener("click", () => doRun({ ...(tool.params || {}) }));
-  function renderLeft() {
-    left.innerHTML = "";
-    left.appendChild(dz);
-    if (files.length) {
-      const list = el("div", { class: "files" });
-      files.forEach((f, i) => list.appendChild(fileChip(f, { onRemove: () => { files.splice(i, 1); renderLeft(); } })));
-      left.appendChild(list);
-    }
-    if (tool.rangeOption && files.length) {
-      left.appendChild(labelled("Page range · optional — much faster for large documents", rangeI));
-    }
-    left.appendChild(btn);
-    if (tool.printView && files.length === 1) {
-      const pv = el("button", { class: "tbtn", type: "button", style: "margin-top:10px",
-        onclick: async () => {
-          try { pv.disabled = true; await printDocxView(files[0]); }
-          catch (err) { showError(right.body, err); }
-          finally { pv.disabled = false; }
-        } },
-        `${I.doc} Full formatting — print view (choose “Save as PDF”)`);
-      left.appendChild(pv);
-      left.appendChild(el("p", { class: "engine-hint" },
-        `${I.shield} The print view keeps bold, lists, tables and images, and uses your
-         browser's own print engine — pick “Save as PDF” in the dialog. Still fully on-device.`));
-    }
-    if (firstUse()) left.appendChild(engineHint(tool.heavy));
-    if (tool.heavy && navigator.deviceMemory && navigator.deviceMemory <= 2)
-      left.appendChild(el("p", { class: "engine-hint" },
-        `${I.alert} This device reports limited memory — very large files may fail here.`));
-  }
-  renderLeft();
-  grid.append(left, right); root.appendChild(grid);
+    },
+  });
 };
 
 /* stamp & page numbers */
 ENGINES.stamp = (tool, root) => {
-  const grid = el("div", { class: "grid2" });
-  const left = el("div"), right = outColumn("Result");
-  right.body.appendChild(placeholder("Nothing yet", "Load a PDF, choose a stamp, and apply."));
-  let file = null, pos = "diagonal";
-  const dz = dropzone({ accept: ".pdf", label: "Drop a PDF or click to browse",
-    onFiles: (f) => { file = f[0]; renderLeft(); } });
   const textI = el("input", { class: "input", type: "text", placeholder: "e.g. CONFIDENTIAL · empty = numbers only" });
   const numC = el("input", { type: "checkbox", id: "pgnum" });
-  const btn = runButton("Apply stamp");
-  btn.addEventListener("click", async () => {
-    if (!file) return;
-    try {
-      await withBusy(btn, "Stamping…", async () => {
-        const res = await callEngine("stamp", { text: textI.value, pos, pagenum: numC.checked },
-          [await readBuf(file)], (msg) => btn.setBusy(true, msg));
-        right.body.innerHTML = "";
-        right.body.appendChild(resultCard({ bytes: res.bytes, name: `${stem(file.name)}_stamped.pdf`, mime: MIME.pdf,
-          stats: [["Output", fmtBytes(res.bytes.byteLength)]] }));
-      });
-    } catch (err) { showError(right.body, err); }
+  let pos = "diagonal";
+  workbench(root, {
+    accept: ".pdf", dropLabel: "Drop a PDF or click to browse",
+    emptyHint: "Load a PDF, choose a stamp, and apply.",
+    runLabel: "Apply stamp", runBusy: "Stamping…",
+    fields: () => {
+      const sel = el("select", { class: "input", onchange: (e) => pos = e.target.value },
+        `<option value="diagonal">Diagonal watermark</option>
+         <option value="header">Header (top, small)</option>
+         <option value="footer">Footer (bottom, small)</option>`);
+      sel.value = pos;
+      const check = el("label", { class: "engine-hint", for: "pgnum", style: "cursor:pointer" });
+      check.appendChild(numC);
+      check.appendChild(document.createTextNode(" Add “Page x of y” to every page"));
+      return [labelled("Stamp text", textI), labelled("Placement", sel), check];
+    },
+    run: async ({ files, btn }) => {
+      const res = await callEngine("stamp", { text: textI.value, pos, pagenum: numC.checked },
+        [await readBuf(files[0])], (msg) => btn.setBusy(true, msg));
+      return { bytes: res.bytes, name: `${stem(files[0].name)}_stamped.pdf`, mime: MIME.pdf,
+               stats: [["Output", fmtBytes(res.bytes.byteLength)]] };
+    },
   });
-  function renderLeft() {
-    left.innerHTML = ""; left.appendChild(dz);
-    if (!file) return;
-    const files = el("div", { class: "files" });
-    files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } }));
-    left.appendChild(files);
-    left.appendChild(labelled("Stamp text", textI));
-    const sel = el("select", { class: "input", onchange: (e) => pos = e.target.value },
-      `<option value="diagonal">Diagonal watermark</option>
-       <option value="header">Header (top, small)</option>
-       <option value="footer">Footer (bottom, small)</option>`);
-    sel.value = pos;
-    left.appendChild(labelled("Placement", sel));
-    const f3 = el("label", { class: "engine-hint", for: "pgnum", style: "cursor:pointer" });
-    f3.appendChild(numC);
-    f3.appendChild(document.createTextNode(" Add “Page x of y” to every page"));
-    left.appendChild(f3);
-    left.appendChild(btn);
-  }
-  renderLeft();
-  grid.append(left, right); root.appendChild(grid);
 };
 
 /* qpdf workbench: protect / unlock / repair / linearize */
 ENGINES.qpdf = (tool, root) => {
-  const grid = el("div", { class: "grid2" });
-  const left = el("div"), right = outColumn("Result");
-  right.body.appendChild(placeholder("Nothing yet", "Load a PDF to " + tool.name.toLowerCase() + "."));
-  let file = null;
-  const dz = dropzone({ accept: ".pdf", label: "Drop a PDF or click to browse",
-    onFiles: (f) => { file = f[0]; renderLeft(); } });
+  const encrypting = tool.qpdf === "encrypt";
+  const needsPw = encrypting || tool.qpdf === "decrypt";
   const pw = el("input", { class: "input mono", type: "password", placeholder: "Password", autocomplete: "new-password" });
-  const pw2 = el("input", { class: "input mono", type: "password", placeholder: "Repeat password", "aria-label": "Repeat password", autocomplete: "new-password", style: "margin-top:8px" });
-  const btn = runButton(tool.name, { free: true });
-  btn.addEventListener("click", async () => {
-    if (!file) return;
-    if (tool.qpdf === "encrypt" && !pw.value) { showError(right.body, "Choose a password first."); return; }
-    if (tool.qpdf === "encrypt" && pw.value !== pw2.value) { showError(right.body, "The passwords don't match."); return; }
-    if (tool.qpdf === "decrypt" && !pw.value) { showError(right.body, "Enter the document's password."); return; }
-    try {
-      await withBusy(btn, "Working…", async () => {
-        const res = await qpdfCall(tool.qpdf, { password: pw.value }, await readBuf(file),
-          (msg) => btn.setBusy(true, msg));
-        right.body.innerHTML = "";
-        right.body.appendChild(resultCard({
-          bytes: res.bytes, name: `${stem(file.name)}${tool.suffix || ""}.pdf`, mime: MIME.pdf,
-          stats: [["Input", fmtBytes(file.size)], ["Output", fmtBytes(res.bytes.byteLength)]],
-        }));
-      });
-    } catch (err) { showError(right.body, err); }
+  const pw2 = el("input", { class: "input mono", type: "password", placeholder: "Repeat password",
+    "aria-label": "Repeat password", autocomplete: "new-password", style: "margin-top:8px" });
+  workbench(root, {
+    accept: ".pdf", dropLabel: "Drop a PDF or click to browse",
+    emptyHint: `Load a PDF to ${tool.name.toLowerCase()}.`,
+    runLabel: tool.name, runBusy: "Working…", free: true,   // qpdf.wasm, not the Python engine
+    fields: () => (needsPw
+      ? labelled(encrypting ? "Set a password · AES-256" : "Current password", pw, encrypting ? pw2 : null)
+      : null),
+    run: async ({ files, btn, error }) => {
+      if (encrypting && !pw.value) return error("Choose a password first.");
+      if (encrypting && pw.value !== pw2.value) return error("The passwords don't match.");
+      if (tool.qpdf === "decrypt" && !pw.value) return error("Enter the document's password.");
+      const res = await qpdfCall(tool.qpdf, { password: pw.value }, await readBuf(files[0]),
+        (msg) => btn.setBusy(true, msg));
+      return { bytes: res.bytes, name: `${stem(files[0].name)}${tool.suffix || ""}.pdf`, mime: MIME.pdf,
+               stats: [["Input", fmtBytes(files[0].size)], ["Output", fmtBytes(res.bytes.byteLength)]] };
+    },
   });
-  function renderLeft() {
-    left.innerHTML = ""; left.appendChild(dz);
-    if (file) {
-      const files = el("div", { class: "files" });
-      files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } }));
-      left.appendChild(files);
-      if (tool.qpdf === "encrypt" || tool.qpdf === "decrypt") {
-        left.appendChild(labelled(
-          tool.qpdf === "encrypt" ? "Set a password · AES-256" : "Current password",
-          pw, tool.qpdf === "encrypt" ? pw2 : null));
-      }
-      left.appendChild(btn);
-    }
-  }
-  renderLeft();
-  grid.append(left, right); root.appendChild(grid);
 };
 
 /* pdf → pptx: render every page (pdf.js) and place it full-bleed on a slide —
@@ -876,48 +952,18 @@ ENGINES.pdf2ppt = (tool, root) => {
 
 /* merge: multi-file, reorderable */
 ENGINES.merge = (tool, root) => {
-  const grid = el("div", { class: "grid2" });
-  const left = el("div"), right = outColumn("Result");
-  right.body.appendChild(placeholder("Nothing yet", "Add two or more PDFs to merge."));
-  let files = [];
-  const dz = dropzone({ accept: ".pdf", multiple: true, label: "Drop PDFs or click to browse",
-    onFiles: (f) => { files = files.concat(f); renderLeft(); } });
-  const btn = runButton("Merge PDFs");
-  btn.addEventListener("click", async () => {
-    if (files.length < 2) { showError(right.body, "Add at least two PDFs."); return; }
-    try {
-      await withBusy(btn, "Merging…", async () => {
-        const bufs = await Promise.all(files.map(readBuf));
-        const res = await callEngine("merge", {}, bufs);
-        right.body.innerHTML = "";
-        right.body.appendChild(resultCard({ bytes: res.bytes, name: "merged.pdf", mime: MIME.pdf,
-          stats: [["Files", files.length], ["Output", fmtBytes(res.bytes.byteLength)]] }));
-      });
-    } catch (err) { showError(right.body, err); }
+  workbench(root, {
+    accept: ".pdf", multiple: true, reorder: true,
+    dropLabel: "Drop PDFs or click to browse",
+    emptyHint: "Add two or more PDFs to merge.",
+    min: 2, minMsg: "Add at least two PDFs.",
+    runLabel: "Merge PDFs", runBusy: "Merging…",
+    run: async ({ files }) => {
+      const res = await callEngine("merge", {}, await Promise.all(files.map(readBuf)));
+      return { bytes: res.bytes, name: "merged.pdf", mime: MIME.pdf,
+               stats: [["Files", files.length], ["Output", fmtBytes(res.bytes.byteLength)]] };
+    },
   });
-  let dragIdx = null;
-  function renderLeft() {
-    left.innerHTML = ""; left.appendChild(dz);
-    if (files.length) {
-      const list = el("div", { class: "files" });
-      const move = (from, to) => { const [m] = files.splice(from, 1); files.splice(to, 0, m); renderLeft(); };
-      files.forEach((f, i) => {
-        const chip = fileChip(f, { draggable: true, onRemove: () => { files.splice(i, 1); renderLeft(); },
-          onUp: i > 0 ? () => move(i, i - 1) : null,
-          onDown: i < files.length - 1 ? () => move(i, i + 1) : null });
-        chip.addEventListener("dragstart", () => { dragIdx = i; chip.classList.add("dragging"); });
-        chip.addEventListener("dragend", () => chip.classList.remove("dragging"));
-        chip.addEventListener("dragover", (e) => e.preventDefault());
-        chip.addEventListener("drop", (e) => { e.preventDefault(); if (dragIdx === null || dragIdx === i) return;
-          const [m] = files.splice(dragIdx, 1); files.splice(i, 0, m); dragIdx = null; renderLeft(); });
-        list.appendChild(chip);
-      });
-      left.appendChild(list);
-    }
-    left.appendChild(btn);
-  }
-  renderLeft();
-  grid.append(left, right); root.appendChild(grid);
 };
 
 /* split: single range, every-N-pages, or several ranges → zip */
@@ -988,251 +1034,160 @@ ENGINES.range = (tool, root) => {
 
 /* delete pages */
 ENGINES.delete = (tool, root) => {
-  const grid = el("div", { class: "grid2" });
-  const left = el("div"), right = outColumn("Result");
-  right.body.appendChild(placeholder("Nothing yet", "Load a PDF and list pages to remove."));
-  let file = null, pages = 0;
-  const dz = dropzone({ accept: ".pdf", label: "Drop a PDF or click to browse",
-    onFiles: async (f) => { file = f[0]; pages = 0; renderLeft();
-      try { const r = await callEngine("pageCount", {}, [await readBuf(file)]); pages = r.data.pages; renderLeft(); } catch {} } });
   const inp = el("input", { class: "input mono", type: "text", placeholder: "e.g. 1, 3, 8-10" });
-  const btn = runButton("Delete pages");
-  btn.addEventListener("click", async () => {
-    if (!file) return;
-    try {
-      await withBusy(btn, "Rebuilding…", async () => {
-        const res = await callEngine("delete", { ranges: inp.value }, [await readBuf(file)]);
-        right.body.innerHTML = "";
-        right.body.appendChild(resultCard({ bytes: res.bytes, name: `${stem(file.name)}_edited.pdf`, mime: MIME.pdf,
-          stats: [["Output", fmtBytes(res.bytes.byteLength)]] }));
-      });
-    } catch (err) { showError(right.body, err); }
+  let pages = 0;
+  workbench(root, {
+    accept: ".pdf", dropLabel: "Drop a PDF or click to browse",
+    emptyHint: "Load a PDF and list pages to remove.",
+    runLabel: "Delete pages", runBusy: "Rebuilding…",
+    onFiles: async ({ files }) => {
+      pages = 0;
+      try { pages = (await callEngine("pageCount", {}, [await readBuf(files[0])])).data.pages; } catch {}
+    },
+    fields: () => labelled(`Pages to remove${pages ? ` · ${pages} total` : ""}`, inp),
+    run: async ({ files }) => {
+      const res = await callEngine("delete", { ranges: inp.value }, [await readBuf(files[0])]);
+      return { bytes: res.bytes, name: `${stem(files[0].name)}_edited.pdf`, mime: MIME.pdf,
+               stats: [["Output", fmtBytes(res.bytes.byteLength)]] };
+    },
   });
-  function renderLeft() {
-    left.innerHTML = ""; left.appendChild(dz);
-    if (file) {
-      const files = el("div", { class: "files" });
-      files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } }));
-      left.appendChild(files);
-      left.appendChild(labelled(`Pages to remove${pages ? ` · ${pages} total` : ""}`, inp));
-      left.appendChild(btn);
-    }
-  }
-  renderLeft();
-  grid.append(left, right); root.appendChild(grid);
 };
 
 /* compress */
 ENGINES.compress = (tool, root) => {
-  const grid = el("div", { class: "grid2" });
-  const left = el("div"), right = outColumn("Result");
-  right.body.appendChild(placeholder("Nothing yet", "Load a PDF and pick a level."));
-  let files = [], quality = 65;
+  let quality = 65;
   const levels = [
     { t: "Level 4", n: "Maximum", d: "Downsample images to ~110 DPI (engine ~17 MB, first use)", v: "max" },
     { t: "Level 3", n: "Strong", d: "Smaller, lighter images", v: 40 },
     { t: "Level 2", n: "Balanced", d: "Recommended", v: 65 },
     { t: "Level 1", n: "Light", d: "Best quality", v: 85 },
   ];
-  const dz = dropzone({ accept: ".pdf", multiple: true, label: "Drop PDFs or click to browse",
-    onFiles: (f) => { files = files.concat(f); renderLeft(); } });
-  const btn = runButton("Compress");
-  btn.addEventListener("click", async () => {
-    if (!files.length) return;
-    const params = quality === "max" ? { mode: "max", dpi: 110, quality: 60 } : { quality };
-    if (quality === "max") requestPersistence();
-    try {
-      await withBusy(btn, "Compressing…", async () => {
-        const before = files.reduce((n, f) => n + f.size, 0);
-        let out, name, mime = MIME.pdf, after;
-        if (files.length === 1) {
-          const res = await callEngine("compress", params, [await readBuf(files[0])],
-            (msg) => btn.setBusy(true, msg));
-          out = res.bytes; after = out.byteLength;
-          name = `${stem(files[0].name)}_compressed.pdf`;
-        } else {
-          const JSZip = await ensureJSZip();
-          const zip = new JSZip();
-          after = 0;
-          for (let i = 0; i < files.length; i++) {
-            btn.setBusy(true, `file ${i + 1} / ${files.length} — ${files[i].name}`);
-            const res = await callEngine("compress", { ...params }, [await readBuf(files[i])],
-              (msg) => btn.setBusy(true, `(${i + 1}/${files.length}) ${msg}`));
-            after += res.bytes.byteLength;
-            zip.file(`${stem(files[i].name)}_compressed.pdf`, res.bytes);
-          }
-          out = await zip.generateAsync({ type: "blob" });
-          name = "compressed_batch.zip"; mime = MIME.zip;
-        }
-        if (quality === "max") { engineMarkOk("compress-max"); btn.baseLabel = "Compress"; }
-        const saved = Math.max(0, Math.round((1 - after / before) * 100));
-        right.body.innerHTML = "";
-        right.body.appendChild(resultCard({ bytes: out, name, mime,
-          stats: [["Before", fmtBytes(before)], ["Saved", saved + "%", true], ["After", fmtBytes(after)]] }));
-      });
-    } catch (err) { showError(right.body, err); }
-  });
-  function renderLeft() {
-    left.innerHTML = ""; left.appendChild(dz);
-    if (files.length) {
-      const list = el("div", { class: "files" });
-      files.forEach((f, i) => list.appendChild(fileChip(f, { onRemove: () => { files.splice(i, 1); renderLeft(); } })));
-      left.appendChild(list);
+  const needsEngine = () => quality === "max" && !engineOk("compress-max");
+  workbench(root, {
+    accept: ".pdf", multiple: true, dropLabel: "Drop PDFs or click to browse",
+    emptyHint: "Load a PDF and pick a level.",
+    runLabel: "Compress", runBusy: "Compressing…",
+    fields: ({ btn, refresh }) => {
       const opts = el("div", { class: "options" });
-      levels.forEach((lv) => {
-        const o = el("button", { class: "opt", type: "button", "aria-pressed": String(lv.v === quality),
-          onclick: () => { quality = lv.v; renderLeft(); } },
-          `<div class="ot">${lv.t}</div><div class="on">${lv.n}</div><div class="od">${lv.d}</div>`);
-        opts.appendChild(o);
-      });
-      left.appendChild(grouped("Optimization level", opts));
-      btn.baseLabel = (quality === "max" && !engineOk("compress-max"))
-        ? "Download engine (~17 MB) & compress" : "Compress";
+      levels.forEach((lv) => opts.appendChild(el("button", {
+        class: "opt", type: "button", "aria-pressed": String(lv.v === quality),
+        onclick: () => { quality = lv.v; refresh(); } },
+        `<div class="ot">${lv.t}</div><div class="on">${lv.n}</div><div class="od">${lv.d}</div>`)));
+      btn.baseLabel = needsEngine() ? "Download engine (~17 MB) & compress" : "Compress";
       btn.setBusy(false);
-      left.appendChild(btn);
-      if (quality === "max" && !engineOk("compress-max"))
-        left.appendChild(engineHint({ mb: 17, label: "downsampling engine (PyMuPDF)" }));
-    }
-  }
-  renderLeft();
-  grid.append(left, right); root.appendChild(grid);
+      return grouped("Optimization level", opts);
+    },
+    after: () => (needsEngine() ? engineHint({ mb: 17, label: "downsampling engine (PyMuPDF)" }) : null),
+    run: async ({ files, btn }) => {
+      const params = quality === "max" ? { mode: "max", dpi: 110, quality: 60 } : { quality };
+      if (quality === "max") requestPersistence();
+      const before = files.reduce((n, f) => n + f.size, 0);
+      let out, name, mime = MIME.pdf, after;
+      if (files.length === 1) {
+        const res = await callEngine("compress", params, [await readBuf(files[0])], (msg) => btn.setBusy(true, msg));
+        out = res.bytes; after = out.byteLength; name = `${stem(files[0].name)}_compressed.pdf`;
+      } else {
+        const b = await runBatch({ files, btn, nameOf: (f) => `${stem(f.name)}_compressed.pdf`,
+          each: async (f, note) => (await callEngine("compress", { ...params }, [await readBuf(f)], note)).bytes });
+        out = b.blob; after = b.bytesTotal; name = "compressed_batch.zip"; mime = MIME.zip;
+      }
+      if (quality === "max") { engineMarkOk("compress-max"); btn.baseLabel = "Compress"; }
+      const saved = Math.max(0, Math.round((1 - after / before) * 100));
+      return { bytes: out, name, mime,
+               stats: [["Before", fmtBytes(before)], ["Saved", saved + "%", true], ["After", fmtBytes(after)]] };
+    },
+  });
 };
 
 /* pdf -> text */
 ENGINES.text = (tool, root) => {
-  const grid = el("div", { class: "grid2" });
-  const left = el("div");
-  const actions = el("div", { class: "tool-actions" });
-  const right = outColumn("Extracted text", actions);
-  right.body.appendChild(placeholder("No text yet", "Load a PDF to pull out its text layer."));
-  let file = null, text = "";
-  const copyBtn = el("button", { class: "tbtn", type: "button", onclick: () => { navigator.clipboard.writeText(text); copyBtn.innerHTML = `${I.check} Copied`; setTimeout(() => copyBtn.innerHTML = `${I.copy} Copy`, 1500); } }, `${I.copy} Copy`);
-  const dlBtn = el("button", { class: "tbtn", type: "button", onclick: () => download(text, file ? stem(file.name) + ".txt" : "text.txt", MIME.txt) }, `${I.dl} .txt`);
-  const dz = dropzone({ accept: ".pdf", label: "Drop a PDF or click to browse",
-    onFiles: (f) => { file = f[0]; renderLeft(); } });
-  const btn = runButton("Extract text");
-  btn.addEventListener("click", async () => {
-    if (!file) return;
-    try {
-      await withBusy(btn, "Reading…", async () => {
-        const res = await callEngine("pdfToText", {}, [await readBuf(file)]);
-        text = res.text; actions.innerHTML = ""; actions.append(copyBtn, dlBtn);
-        right.body.innerHTML = ""; right.body.appendChild(el("div", { class: "text-out" }, escapeHtml(text)));
-      });
-    } catch (err) { showError(right.body, err); }
+  let text = "", api;
+  const copyBtn = el("button", { class: "tbtn", type: "button", onclick: () => {
+    navigator.clipboard.writeText(text);
+    copyBtn.innerHTML = `${I.check} Copied`;
+    setTimeout(() => copyBtn.innerHTML = `${I.copy} Copy`, 1500);
+  } }, `${I.copy} Copy`);
+  const dlBtn = el("button", { class: "tbtn", type: "button", onclick: () =>
+    download(text, api.files[0] ? stem(api.files[0].name) + ".txt" : "text.txt", MIME.txt) }, `${I.dl} .txt`);
+  api = workbench(root, {
+    accept: ".pdf", dropLabel: "Drop a PDF or click to browse", withActions: true,
+    resultTitle: "Extracted text", emptyTitle: "No text yet",
+    emptyHint: "Load a PDF to pull out its text layer.",
+    runLabel: "Extract text", runBusy: "Reading…",
+    run: async ({ files, actions }) => {
+      const res = await callEngine("pdfToText", {}, [await readBuf(files[0])]);
+      text = res.text;
+      actions.innerHTML = ""; actions.append(copyBtn, dlBtn);
+      return { text };
+    },
   });
-  function renderLeft() {
-    left.innerHTML = ""; left.appendChild(dz);
-    if (file) { const files = el("div", { class: "files" }); files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } })); left.appendChild(files); left.appendChild(btn); }
-  }
-  renderLeft();
-  grid.append(left, right); root.appendChild(grid);
 };
 
 /* text -> pdf (compose) */
 ENGINES.compose = (tool, root) => {
-  const grid = el("div", { class: "grid2" });
-  const left = el("div"), right = outColumn("Result");
-  right.body.appendChild(placeholder("Nothing yet", "Type some text and export."));
-  const ta = el("textarea", { class: "textarea", placeholder: "Type or paste text here…" });
+  const ta = el("textarea", { class: "textarea", id: "pf-content", placeholder: "Type or paste text here…" });
   ta.value = "Untitled note\n\nStart writing. Line breaks and paragraphs are preserved.";
   const loadInput = el("input", { type: "file", accept: ".txt,.md,.csv", class: "sr", "aria-label": "Load a text file" });
-  loadInput.addEventListener("change", async () => { if (loadInput.files[0]) { ta.value = await loadInput.files[0].text(); } loadInput.value = ""; });
-  const loadBtn = el("button", { class: "tbtn", type: "button", onclick: () => loadInput.click() }, `${I.file} Load .txt`);
-  const btn = runButton("Export PDF");
-  btn.addEventListener("click", async () => {
-    if (!ta.value.trim()) return;
-    try {
-      await withBusy(btn, "Rendering…", async () => {
-        const res = await callEngine("textToPdf", { text: ta.value, name: "note.txt" }, []);
-        right.body.innerHTML = "";
-        right.body.appendChild(resultCard({ bytes: res.bytes, name: "document.pdf", mime: MIME.pdf,
-          stats: [["Output", fmtBytes(res.bytes.byteLength)]] }));
-      });
-    } catch (err) { showError(right.body, err); }
+  loadInput.addEventListener("change", async () => {
+    if (loadInput.files[0]) ta.value = await loadInput.files[0].text();
+    loadInput.value = "";
   });
-  const field = el("div", { class: "field" });
-  ta.id = "pf-content";
-  const lbl = el("label", { for: "pf-content" }, "Content"); field.appendChild(lbl);
-  const head = el("div", { class: "tool-actions", style: "margin-bottom:8px" }); head.appendChild(loadBtn);
-  field.append(head, ta, loadInput);
-  left.append(field, btn);
-  grid.append(left, right); root.appendChild(grid);
+  const loadBtn = el("button", { class: "tbtn", type: "button", onclick: () => loadInput.click() }, `${I.file} Load .txt`);
+  workbench(root, {
+    accept: null,                       // composed in the page, nothing to upload
+    emptyHint: "Type some text and export.",
+    runLabel: "Export PDF", runBusy: "Rendering…",
+    fields: () => {
+      const field = el("div", { class: "field" });
+      field.appendChild(el("label", { for: "pf-content" }, "Content"));
+      const head = el("div", { class: "tool-actions", style: "margin-bottom:8px" });
+      head.appendChild(loadBtn);
+      field.append(head, ta, loadInput);
+      return field;
+    },
+    run: async ({ error }) => {
+      if (!ta.value.trim()) return error("Type some text first.");
+      const res = await callEngine("textToPdf", { text: ta.value, name: "note.txt" }, []);
+      return { bytes: res.bytes, name: "document.pdf", mime: MIME.pdf,
+               stats: [["Output", fmtBytes(res.bytes.byteLength)]] };
+    },
+  });
 };
 
 /* spreadsheet -> pdf */
 ENGINES.table = (tool, root) => {
-  const grid = el("div", { class: "grid2" });
-  const left = el("div"), right = outColumn("Result");
-  right.body.appendChild(placeholder("Nothing yet", "Load an .xlsx or .csv."));
-  let file = null;
-  const dz = dropzone({ accept: ".xlsx,.csv", label: "Drop a spreadsheet or click to browse",
-    onFiles: (f) => { file = f[0]; renderLeft(); } });
-  const btn = runButton("Convert to PDF");
-  btn.addEventListener("click", async () => {
-    if (!file) return;
-    const isCsv = /\.csv$/i.test(file.name);
-    try {
-      await withBusy(btn, "Rendering table…", async () => {
-        const res = await callEngine("tableToPdf", { isCsv }, [await readBuf(file)]);
-        right.body.innerHTML = "";
-        right.body.appendChild(resultCard({ bytes: res.bytes, name: `${stem(file.name)}.pdf`, mime: MIME.pdf,
-          stats: [["Output", fmtBytes(res.bytes.byteLength)]] }));
-      });
-    } catch (err) { showError(right.body, err); }
+  workbench(root, {
+    accept: ".xlsx,.csv", dropLabel: "Drop a spreadsheet or click to browse",
+    emptyHint: "Load an .xlsx or .csv.", runLabel: "Convert to PDF", runBusy: "Rendering table…",
+    run: async ({ files }) => {
+      const res = await callEngine("tableToPdf", { isCsv: /\.csv$/i.test(files[0].name) },
+        [await readBuf(files[0])]);
+      return { bytes: res.bytes, name: `${stem(files[0].name)}.pdf`, mime: MIME.pdf,
+               stats: [["Output", fmtBytes(res.bytes.byteLength)]] };
+    },
   });
-  function renderLeft() {
-    left.innerHTML = ""; left.appendChild(dz);
-    if (file) { const files = el("div", { class: "files" }); files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } })); left.appendChild(files); left.appendChild(btn); }
-  }
-  renderLeft();
-  grid.append(left, right); root.appendChild(grid);
 };
 
 /* images -> pdf */
 ENGINES.images = (tool, root) => {
-  const grid = el("div", { class: "grid2" });
-  const left = el("div"), right = outColumn("Result");
-  right.body.appendChild(placeholder("Nothing yet", "Add images to compile a PDF."));
-  let files = [], size = "letter";
-  const dz = dropzone({ accept: "image/*", multiple: true, label: "Drop images or click to browse",
-    onFiles: (f) => { files = files.concat(f); renderLeft(); } });
-  const btn = runButton("Build PDF");
-  btn.addEventListener("click", async () => {
-    if (!files.length) return;
-    try {
-      await withBusy(btn, "Building…", async () => {
-        const bufs = await Promise.all(files.map(readBuf));
-        const res = await callEngine("imagesToPdf", { size }, bufs);
-        right.body.innerHTML = "";
-        right.body.appendChild(resultCard({ bytes: res.bytes, name: "images.pdf", mime: MIME.pdf,
-          stats: [["Images", files.length], ["Output", fmtBytes(res.bytes.byteLength)]] }));
-      });
-    } catch (err) { showError(right.body, err); }
-  });
-  let dragIdx = null;
-  function renderLeft() {
-    left.innerHTML = ""; left.appendChild(dz);
-    if (files.length) {
-      const list = el("div", { class: "files" });
-      const move = (from, to) => { const [m] = files.splice(from, 1); files.splice(to, 0, m); renderLeft(); };
-      files.forEach((f, i) => {
-        const chip = fileChip(f, { draggable: true, onRemove: () => { files.splice(i, 1); renderLeft(); },
-          onUp: i > 0 ? () => move(i, i - 1) : null,
-          onDown: i < files.length - 1 ? () => move(i, i + 1) : null });
-        chip.addEventListener("dragstart", () => dragIdx = i);
-        chip.addEventListener("dragover", (e) => e.preventDefault());
-        chip.addEventListener("drop", (e) => { e.preventDefault(); if (dragIdx === null || dragIdx === i) return; const [m] = files.splice(dragIdx, 1); files.splice(i, 0, m); dragIdx = null; renderLeft(); });
-        list.appendChild(chip);
-      });
-      left.appendChild(list);
+  let size = "letter";
+  workbench(root, {
+    accept: "image/*", multiple: true, reorder: true,
+    dropLabel: "Drop images or click to browse",
+    emptyHint: "Add images to compile a PDF.",
+    runLabel: "Build PDF", runBusy: "Building…",
+    fields: () => {
       const sel = el("select", { class: "input", onchange: (e) => size = e.target.value },
         `<option value="letter">Letter</option><option value="a4">A4</option>`);
-      left.appendChild(labelled("Page size", sel)); left.appendChild(btn);
-    }
-  }
-  renderLeft();
-  grid.append(left, right); root.appendChild(grid);
+      sel.value = size;
+      return labelled("Page size", sel);
+    },
+    run: async ({ files }) => {
+      const res = await callEngine("imagesToPdf", { size }, await Promise.all(files.map(readBuf)));
+      return { bytes: res.bytes, name: "images.pdf", mime: MIME.pdf,
+               stats: [["Images", files.length], ["Output", fmtBytes(res.bytes.byteLength)]] };
+    },
+  });
 };
 
 /* organize & rotate (pdf.js thumbnails) */
@@ -1264,6 +1219,7 @@ ENGINES.organize = (tool, root) => {
     bar.appendChild(el("div", { class: "eyebrow" }, `${thumbs.length} page${thumbs.length === 1 ? "" : "s"} · drag to reorder`));
     const btn = runButton("Save PDF");
     btn.style.marginTop = "0"; btn.style.width = "auto";
+    btn.setBusy(true, "Rendering pages…");   // inert until the board is drawn
     bar.appendChild(btn);
     left.appendChild(bar);
     const board = el("div", { class: "thumbs" });
@@ -1298,6 +1254,7 @@ ENGINES.organize = (tool, root) => {
       cell.addEventListener("drop", (e) => { e.preventDefault(); if (dragIdx === null || dragIdx === i) return; const [m] = thumbs.splice(dragIdx, 1); thumbs.splice(i, 0, m); dragIdx = null; renderBoard(); });
     }
 
+    btn.setBusy(false);
     btn.addEventListener("click", async () => {
       if (!thumbs.length) { showError(left, "Keep at least one page."); return; }
       try {
