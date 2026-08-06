@@ -55,6 +55,8 @@ const CASES = [
   { id: "unlock",    files: ["locked"], before: (p) => type(p, '#stage input[type="password"]', PASSWORD) },
   { id: "repair",    files: ["multi"] },
   { id: "metaStrip", files: ["multi"] },
+  // batch mode: many files in, one zip out — exercises runBatch()
+  { id: "metaStrip", as: "metaStrip×2", files: ["multi", "one"], expectText: /\.zip$|zip/ },
   { id: "pdfText",   files: ["multi"], expect: "#stage .text-out" },
   { id: "pdfImg",    files: ["multi"], expect: "#stage .gallery figure" },
   { id: "pdfPpt",    files: ["multi"] },
@@ -145,13 +147,14 @@ for (const c of CASES.filter((x) => selected.includes(x))) {
     const state = await page.evaluate(() => document.querySelector("#runtime").dataset.state);
     if (consoleErrors.length) throw new Error(consoleErrors.join(" | "));
     if (state === "error") throw new Error("runtime ended in the error state");
-    results.push({ id: c.id, pass: true, ms: Date.now() - t0, label });
-    ok(`${c.id.padEnd(10)} ${String(Date.now() - t0).padStart(6)}ms  ${label.slice(0, 62)}`);
+    if (c.expectText && !c.expectText.test(label)) throw new Error(`result "${label}" does not match ${c.expectText}`);
+    results.push({ id: c.as || c.id, pass: true, ms: Date.now() - t0, label });
+    ok(`${(c.as || c.id).padEnd(12)} ${String(Date.now() - t0).padStart(6)}ms  ${label.slice(0, 62)}`);
   } catch (err) {
     const alert = await page.$eval("#stage", (n) => n.querySelector(".alert")?.textContent.trim() || "")
       .catch(() => "");
-    results.push({ id: c.id, pass: false, ms: Date.now() - t0, label: (alert || err.message).slice(0, 150) });
-    bad(`${c.id.padEnd(10)} ${String(Date.now() - t0).padStart(6)}ms  ${(alert || err.message).slice(0, 110)}`);
+    results.push({ id: c.as || c.id, pass: false, ms: Date.now() - t0, label: (alert || err.message).slice(0, 150) });
+    bad(`${(c.as || c.id).padEnd(12)} ${String(Date.now() - t0).padStart(6)}ms  ${(alert || err.message).slice(0, 110)}`);
   }
 }
 
