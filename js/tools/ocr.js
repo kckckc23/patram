@@ -1,7 +1,7 @@
 import { el, stem, readBuf, escapeHtml } from "../dom.js";
 import { I, MIME } from "../icons.js";
 import { createWorkspace, dropzone, fileChip, runButton, outColumn, placeholder, showError, labelled } from "../workspace.js";
-import { ensurePdfjs, ensureTesseract, callEngine, setRuntime, engineReady } from "../bridge.js";
+import { ensurePdfjs, ensureTesseract, callEngine, setRuntime, isEngineReady } from "../bridge.js";
 
 export function registerOcr(ENGINES) {
   ENGINES.ocr = (tool, root) => {
@@ -67,7 +67,7 @@ export function registerOcr(ENGINES) {
         } }, `${I.dl} Searchable PDF`);
         actions.appendChild(sBtn);
       } catch (err) { showError(right.body, err); }
-      finally { btn.setBusy(false); prog.style.display = "none"; if (engineReady) setRuntime("ready", "ready · on-device"); }
+      finally { btn.setBusy(false); prog.style.display = "none"; if (isEngineReady()) setRuntime("ready", "ready · on-device"); }
     });
 
     function renderLeft() {
@@ -87,4 +87,4 @@ export function registerOcr(ENGINES) {
     grid.append(left, right); root.appendChild(grid);
     return api;
   };
-}
+    }

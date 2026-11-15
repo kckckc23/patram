@@ -1,7 +1,7 @@
 import { el, stem, fmtBytes, readBuf } from "../dom.js";
 import { I, MIME } from "../icons.js";
 import { createWorkspace, dropzone, fileChip, runButton, outColumn, placeholder, showError, resultCard } from "../workspace.js";
-import { ensurePdfjs, callEngine, setRuntime, engineReady } from "../bridge.js";
+import { ensurePdfjs, callEngine, setRuntime, isEngineReady } from "../bridge.js";
 
 export function registerPdf2Ppt(ENGINES) {
   ENGINES.pdf2ppt = (tool, root) => {
@@ -49,7 +49,7 @@ export function registerPdf2Ppt(ENGINES) {
         right.body.innerHTML = "";
         right.body.appendChild(resultCard(result));
       } catch (err) { right.body.innerHTML = ""; showError(right.body, err); }
-      finally { btn.setBusy(false); prog.style.display = "none"; if (engineReady) setRuntime("ready", "ready · on-device"); }
+      finally { btn.setBusy(false); prog.style.display = "none"; if (isEngineReady()) setRuntime("ready", "ready · on-device"); }
     });
 
     const alt = el("button", { class: "tbtn", type: "button", style: "margin-top:10px" },
@@ -65,7 +65,7 @@ export function registerPdf2Ppt(ENGINES) {
         right.body.innerHTML = "";
         right.body.appendChild(resultCard(result));
       } catch (err) { right.body.innerHTML = ""; showError(right.body, err); }
-      finally { btn.setBusy(false); if (engineReady) setRuntime("ready", "ready · on-device"); }
+      finally { btn.setBusy(false); if (isEngineReady()) setRuntime("ready", "ready · on-device"); }
     });
 
     function renderLeft() {

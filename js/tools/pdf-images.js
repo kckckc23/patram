@@ -1,7 +1,7 @@
 import { el, stem, fmtBytes, readBuf } from "../dom.js";
 import { I, MIME } from "../icons.js";
 import { createWorkspace, dropzone, fileChip, runButton, placeholder, showError, outColumn } from "../workspace.js";
-import { ensurePdfjs, ensureJSZip, setRuntime, engineReady } from "../bridge.js";
+import { ensurePdfjs, ensureJSZip, setRuntime, isEngineReady } from "../bridge.js";
 
 export function registerPdfImages(ENGINES) {
   ENGINES.pdf2img = (tool, root) => {
@@ -48,7 +48,7 @@ export function registerPdfImages(ENGINES) {
         right.body.innerHTML = "";
         showError(right.body, err);
       }
-      finally { btn.setBusy(false); prog.style.display = "none"; if (engineReady) setRuntime("ready", "ready · on-device"); }
+      finally { btn.setBusy(false); prog.style.display = "none"; if (isEngineReady()) setRuntime("ready", "ready · on-device"); }
     });
 
     function renderResult() {
