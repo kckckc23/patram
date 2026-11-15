@@ -678,6 +678,7 @@ function workbench(root, spec) {
   const dz = s.accept === null ? null : dropzone({
     accept: s.accept, multiple: s.multiple, label: s.dropLabel,
     onFiles: (picked) => {
+      reset();
       api.files = s.multiple ? api.files.concat(picked) : [picked[0]];
       refresh();
       if (s.onFiles) Promise.resolve(s.onFiles(api)).then(refresh, () => {});
@@ -685,6 +686,7 @@ function workbench(root, spec) {
   });
 
   btn.addEventListener("click", async () => {
+    reset();
     const need = s.min == null ? (dz ? 1 : 0) : s.min;
     if (api.files.length < need) { if (need > 1) error(s.minMsg || `Add at least ${need} files.`); return; }
     try {
@@ -705,7 +707,7 @@ function workbench(root, spec) {
       api.files.forEach((f, i) => {
         const chip = fileChip(f, {
           draggable: s.reorder,
-          onRemove: () => { api.files.splice(i, 1); refresh(); },
+          onRemove: () => { reset(); api.files.splice(i, 1); refresh(); },
           onUp: s.reorder && i > 0 ? () => move(i, i - 1) : null,
           onDown: s.reorder && i < api.files.length - 1 ? () => move(i, i + 1) : null,
         });
@@ -748,11 +750,32 @@ ENGINES.convert = (tool, root) => {
   /* one conversion — single file, or every file zipped */
   async function convert(api, params) {
     const { files, btn } = api;
-    const m = rangeI.value.trim().match(/^(\d+)(?:\s*-\s*(\d+))?$/);
-    if (tool.rangeOption && m) { params.start = +m[1]; params.end = +(m[2] || m[1]); }
+    if (tool.rangeOption) {
+      const rv = rangeI.value.trim();
+      if (rv) {
+        const m = rv.match(/^(\d+)(?:\s*-\s*(\d+))?$/);
+        if (!m) throw new Error("Use one page or one range, e.g. 2 or 2-3. Comma-separated pages aren't supported.");
+        params.start = +m[1];
+        params.end = +(m[2] || m[1]);
+      }
+    }
     if (tool.heavy) requestPersistence();
     let out;
     if (files.length === 1) {
+      if (tool.action === "wordToPdf" && !params.engine) {
+        try {
+          const JSZip = await ensureJSZip();
+          const zip = await JSZip.loadAsync(await readBuf(files[0]));
+          const docXml = await (zip.file("word/document.xml")?.async("string") || Promise.resolve(""));
+          const hasTables = /<w:tbl[\s>]/.test(docXml);
+          const hasImages = /<(?:w:drawing|w:pict|v:imagedata)[\s>]/.test(docXml);
+          if (hasTables || hasImages) {
+            const parts = [hasTables ? "tables" : null, hasImages ? "images" : null].filter(Boolean).join(" and ");
+            api.right.body.appendChild(el("p", { class: "engine-hint" },
+              `${I.alert} This file has ${parts} the basic converter drops. Use the print view for full formatting.`));
+          }
+        } catch {}
+      }
       const res = await callEngine(tool.action, params, [await readBuf(files[0])], (msg) => btn.setBusy(true, msg));
       out = { bytes: res.bytes, name: outName(files[0]), mime: MIME[tool.out],
               stats: [["Output", fmtBytes(res.bytes.byteLength)]] };
@@ -973,8 +996,11 @@ ENGINES.range = (tool, root) => {
   right.body.appendChild(placeholder("Nothing yet", "Load a PDF and choose how to split it."));
   let file = null, pages = 0, mode = "single";
   const dz = dropzone({ accept: ".pdf", label: "Drop a PDF or click to browse",
-    onFiles: async (f) => { file = f[0]; pages = 0; renderLeft();
-      try { const r = await callEngine("pageCount", {}, [await readBuf(file)]); pages = r.data.pages; renderLeft(); } catch {} } });
+    onFiles: async (f) => {
+      right.body.innerHTML = "";
+      file = f[0]; pages = 0; renderLeft();
+      try { const r = await callEngine("pageCount", {}, [await readBuf(file)]); pages = r.data.pages; renderLeft(); } catch {}
+    } });
   const startI = el("input", { type: "number", min: "1", value: "1", "aria-label": "First page" });
   const endI = el("input", { type: "number", min: "1", value: "1", "aria-label": "Last page" });
   const everyI = el("input", { class: "input mono", type: "number", min: "1", value: "10" });
@@ -982,6 +1008,7 @@ ENGINES.range = (tool, root) => {
   const btn = runButton("Split PDF");
   btn.addEventListener("click", async () => {
     if (!file) return;
+    right.body.innerHTML = "";
     try {
       await withBusy(btn, "Splitting…", async () => {
         let res, name, mime = MIME.pdf, stats;
@@ -1008,7 +1035,7 @@ ENGINES.range = (tool, root) => {
     left.innerHTML = ""; left.appendChild(dz);
     if (!file) return;
     const files = el("div", { class: "files" });
-    files.appendChild(fileChip(file, { onRemove: () => { file = null; renderLeft(); } }));
+    files.appendChild(fileChip(file, { onRemove: () => { right.body.innerHTML = ""; file = null; renderLeft(); } }));
     left.appendChild(files);
     const sel = el("select", { class: "input", onchange: (e) => { mode = e.target.value; renderLeft(); } },
       `<option value="single">Keep one range</option>
@@ -1081,20 +1108,49 @@ ENGINES.compress = (tool, root) => {
     run: async ({ files, btn }) => {
       const params = quality === "max" ? { mode: "max", dpi: 110, quality: 60 } : { quality };
       if (quality === "max") requestPersistence();
-      const before = files.reduce((n, f) => n + f.size, 0);
-      let out, name, mime = MIME.pdf, after;
+      const savedLabel = (before, after) => {
+        const pct = (1 - after / before) * 100;
+        if (pct >= 1) return Math.round(pct) + "%";
+        if (pct > 0) return "<1%";
+        return "0%";
+      };
       if (files.length === 1) {
         const res = await callEngine("compress", params, [await readBuf(files[0])], (msg) => btn.setBusy(true, msg));
-        out = res.bytes; after = out.byteLength; name = `${stem(files[0].name)}_compressed.pdf`;
+        const out = res.bytes, before = files[0].size, after = out.byteLength;
+        const name = `${stem(files[0].name)}_compressed.pdf`;
+        if (quality === "max") { engineMarkOk("compress-max"); btn.baseLabel = "Compress"; }
+        if (after >= before) {
+          return { bytes: out, name, mime: MIME.pdf,
+                   message: "This file can't be compressed further at this level. Original kept.",
+                   stats: [["Before", fmtBytes(before)], ["After", fmtBytes(after)]] };
+        }
+        return { bytes: out, name, mime: MIME.pdf,
+                 stats: [["Before", fmtBytes(before)], ["Saved", savedLabel(before, after), true], ["After", fmtBytes(after)]] };
       } else {
-        const b = await runBatch({ files, btn, nameOf: (f) => `${stem(f.name)}_compressed.pdf`,
-          each: async (f, note) => (await callEngine("compress", { ...params }, [await readBuf(f)], note)).bytes });
-        out = b.blob; after = b.bytesTotal; name = "compressed_batch.zip"; mime = MIME.zip;
+        const JSZip = await ensureJSZip();
+        const zip = new JSZip();
+        let before = 0, pdfBytes = 0, unchanged = 0;
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i];
+          const label = f.name.length > 34 ? "…" + f.name.slice(-32) : f.name;
+          const note = (m) => btn.setBusy(true, files.length > 1 ? `[${i + 1}/${files.length}] ${label} — ${m}` : m);
+          note("starting…");
+          const bytes = (await callEngine("compress", { ...params }, [await readBuf(f)], note)).bytes;
+          before += f.size;
+          pdfBytes += bytes.byteLength || bytes.size || 0;
+          if ((bytes.byteLength || bytes.size || 0) >= f.size) unchanged++;
+          zip.file(`${stem(f.name)}_compressed.pdf`, bytes);
+        }
+        const out = await zip.generateAsync({ type: "blob" });
+        if (quality === "max") { engineMarkOk("compress-max"); btn.baseLabel = "Compress"; }
+        const stats = [["Files", files.length], ["Before", fmtBytes(before)]];
+        if (unchanged) stats.push(["Unchanged", unchanged]);
+        if (pdfBytes < before) stats.push(["Saved", savedLabel(before, pdfBytes), true]);
+        stats.push(["After", fmtBytes(pdfBytes)]);
+        const res = { bytes: out, name: "compressed_batch.zip", mime: MIME.zip, stats };
+        if (unchanged === files.length) res.message = "This file can't be compressed further at this level. Original kept.";
+        return res;
       }
-      if (quality === "max") { engineMarkOk("compress-max"); btn.baseLabel = "Compress"; }
-      const saved = Math.max(0, Math.round((1 - after / before) * 100));
-      return { bytes: out, name, mime,
-               stats: [["Before", fmtBytes(before)], ["Saved", saved + "%", true], ["After", fmtBytes(after)]] };
     },
   });
 };
@@ -1662,10 +1718,11 @@ ENGINES.ocr = (tool, root) => {
 };
 
 /* ---- result card + errors ------------------------------------------------ */
-function resultCard({ bytes, name, mime, stats }) {
+function resultCard({ bytes, name, mime, stats, message }) {
   const card = el("div", { class: "result" });
   card.appendChild(el("div", { class: "ok-ring" }, I.check));
   card.appendChild(el("h4", {}, "Done — on your machine"));
+  if (message) card.appendChild(el("p", { class: "engine-hint", style: "margin:10px 0 0" }, message));
   if (stats && stats.length) {
     const row = el("div", { class: "stat-row" });
     stats.forEach(([k, v, hi]) => row.appendChild(el("div", { class: "stat" + (hi ? " hi" : "") }, `<div class="k">${k}</div><div class="v">${v}</div>`)));
