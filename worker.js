@@ -19,7 +19,7 @@ const BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 // pushed code update could then meet months-old wheels and throw at run time on
 // exactly the returning browsers, while working everywhere else. Pinning also
 // means two users converting the same file get the same result.
-// Keep in step with test/verify.mjs's install block (see CLAUDE.md).
+// Keep this boot install list in sync with the packages the runtime needs.
 const BOOT_PACKAGES = [
   "pypdf==6.15.0",
   "openpyxl==3.1.5",
@@ -55,7 +55,7 @@ const FONT_FILES = [
   "NotoSans-Regular.ttf", "NotoSans-Bold.ttf",
   "NotoSansDevanagari-Regular.ttf", "NotoSansDevanagari-Bold.ttf",
 ];
-const FONT_ACTIONS = new Set(["textToPdf", "wordToPdf", "tableToPdf", "pptToPdf"]);
+const FONT_ACTIONS = new Set(["textToPdf", "wordToPdf", "tableToPdf", "pptToPdf", "ocrOverlay", "stamp"]);
 let fontsReady = null;
 function ensureFonts(note) {
   if (!fontsReady) {
@@ -135,7 +135,7 @@ self.onmessage = async (e) => {
 
     (files || []).forEach((buf, i) => pyodide.FS.writeFile("/in" + i, new Uint8Array(buf)));
 
-    const p = { ...(params || {}), n: (files || []).length };
+    const p = { ...(params || {}), nFiles: (files || []).length };
     const call = `dispatch(${JSON.stringify(action)}, ${JSON.stringify(JSON.stringify(p))})`;
     const res = JSON.parse(pyodide.runPython(call));
 

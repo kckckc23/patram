@@ -52,12 +52,23 @@ async function runQpdf(op, params, bytes) {
   } catch (e) {
     code = typeof e?.status === "number" ? e.status : 1;
   }
+  let out = null;
+  try { out = m.FS.readFile("/out.pdf"); } catch {}
   // qpdf exit 3 = "succeeded with warnings" (expected when repairing)
   if (code !== 0 && code !== 3) {
     const msg = stderr.filter((s) => s.includes("qpdf:")).pop() || stderr.pop() || ("qpdf failed (exit " + code + ")");
+    if (op === "repair") {
+      throw new Error("This PDF's cross-reference table or structure is too damaged for the in-browser repair engine to rebuild. Try repairing it with a desktop tool such as qpdf or MuPDF.");
+    }
     throw new Error(msg.replace(/^qpdf:\s*/, "").replace(/\/in\.pdf/g, "file"));
   }
-  return m.FS.readFile("/out.pdf");
+  if (!out || !out.length) {
+    if (op === "repair") {
+      throw new Error("This PDF's cross-reference table or structure is too damaged for the in-browser repair engine to rebuild. Try repairing it with a desktop tool such as qpdf or MuPDF.");
+    }
+    throw new Error("qpdf produced no output.");
+  }
+  return out;
 }
 
 self.onmessage = async (e) => {

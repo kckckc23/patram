@@ -65,6 +65,83 @@ def _latin1(s) -> str:
 FONT_DIR = "/fonts"
 
 
+def _ttf_codepoints(path):
+    """Return set of Unicode code points covered by a TTF (cmap formats 4 & 12)."""
+    import struct
+
+    cps = set()
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+        num_tables = struct.unpack(">H", data[4:6])[0]
+        cmap_off = cmap_len = 0
+        for i in range(num_tables):
+            o = 12 + i * 16
+            tag = data[o:o + 4]
+            if tag == b"cmap":
+                cmap_off = struct.unpack(">I", data[o + 8:o + 12])[0]
+                cmap_len = struct.unpack(">I", data[o + 12:o + 16])[0]
+                break
+        if not cmap_off:
+            return cps
+        num_sub = struct.unpack(">H", data[cmap_off + 2:cmap_off + 4])[0]
+        best = None  # (score, offset)
+        for i in range(num_sub):
+            so = cmap_off + 4 + i * 8
+            pid, eid, sub_off = struct.unpack(">HHI", data[so:so + 8])
+            # prefer Unicode full (0,4)/(3,10) format 12, else (0,3)/(3,1) format 4
+            fmt = struct.unpack(">H", data[cmap_off + sub_off:cmap_off + sub_off + 2])[0]
+            score = -1
+            if fmt == 12 and pid == 3 and eid == 10:
+                score = 4
+            elif fmt == 12 and pid == 0:
+                score = 3
+            elif fmt == 4 and pid == 3 and eid == 1:
+                score = 2
+            elif fmt == 4 and pid == 0:
+                score = 1
+            if score >= 0 and (best is None or score > best[0]):
+                best = (score, cmap_off + sub_off)
+        if best is None:
+            return cps
+        off = best[1]
+        fmt = struct.unpack(">H", data[off:off + 2])[0]
+        if fmt == 4:
+            seg_count = struct.unpack(">H", data[off + 6:off + 8])[0] // 2
+            end = struct.unpack(">" + "H" * seg_count, data[off + 14:off + 14 + 2 * seg_count])
+            start = struct.unpack(">" + "H" * seg_count, data[off + 16 + 2 * seg_count:off + 16 + 4 * seg_count])
+            delta = struct.unpack(">" + "h" * seg_count, data[off + 16 + 4 * seg_count:off + 16 + 6 * seg_count])
+            roff_base = off + 16 + 6 * seg_count
+            ro = struct.unpack(">" + "H" * seg_count, data[roff_base:roff_base + 2 * seg_count])
+            for i in range(seg_count):
+                if end[i] == 0xFFFF and start[i] == 0xFFFF:
+                    continue
+                for c in range(start[i], end[i] + 1):
+                    if ro[i] == 0:
+                        gid = (c + delta[i]) & 0xFFFF
+                    else:
+                        idx = roff_base + 2 * i + ro[i] + 2 * (c - start[i])
+                        if idx + 2 > off + struct.unpack(">H", data[off + 2:off + 4])[0]:
+                            gid = 0
+                        else:
+                            gid = struct.unpack(">H", data[idx:idx + 2])[0]
+                            if gid:
+                                gid = (gid + delta[i]) & 0xFFFF
+                    if gid:
+                        cps.add(c)
+        elif fmt == 12:
+            n_groups = struct.unpack(">I", data[off + 12:off + 16])[0]
+            p = off + 16
+            for _ in range(n_groups):
+                start_c, end_c, _gid = struct.unpack(">III", data[p:p + 12])
+                for c in range(start_c, end_c + 1):
+                    cps.add(c)
+                p += 12
+    except Exception:
+        return set()
+    return cps
+
+
 def _register_fonts(pdf):
     """Register the bundled Unicode fonts (worker writes them into /fonts) on an
     FPDF instance. Returns the body family — NotoSans with a Devanagari fallback
@@ -72,6 +149,7 @@ def _register_fonts(pdf):
     import os
 
     if not os.path.isfile(f"{FONT_DIR}/NotoSans-Regular.ttf"):
+        pdf.covered_cps = None
         return None
     try:
         pdf.add_font("NotoSans", "", f"{FONT_DIR}/NotoSans-Regular.ttf")
@@ -83,8 +161,12 @@ def _register_fonts(pdf):
             pdf.set_fallback_fonts(["NotoDeva"], exact_match=False)
         except TypeError:
             pdf.set_fallback_fonts(["NotoDeva"])
+        covered = _ttf_codepoints(f"{FONT_DIR}/NotoSans-Regular.ttf")
+        covered.update(_ttf_codepoints(f"{FONT_DIR}/NotoSansDevanagari-Regular.ttf"))
+        pdf.covered_cps = covered
         return "NotoSans"
     except Exception:
+        pdf.covered_cps = None
         return None
 
 
@@ -281,6 +363,7 @@ def ocr_overlay(data: bytes, pages) -> bytes:
         if not words:
             return
         face = _face(ov)
+        has_fonts = bool(getattr(ov, "uni_family", None))
         try:
             from fpdf.enums import TextMode
             ov.text_mode = TextMode.INVISIBLE
@@ -290,10 +373,19 @@ def ocr_overlay(data: bytes, pages) -> bytes:
             t = str(wd.get("t", "")).strip()
             if not t:
                 continue
+            if not has_fonts:
+                try:
+                    t.encode("latin-1")
+                except UnicodeEncodeError:
+                    continue
             x0, y0, y1 = wd["x0"] / s, wd["y0"] / s, wd["y1"] / s
             size = max(4.0, (y1 - y0) * 0.92)
-            ov.set_font(face, "", size)
-            ov.text(x0, y1 - size * 0.22, _txt(ov, t))
+            if has_fonts and any("\u0900" <= ch <= "\u097F" for ch in t):
+                ov.set_font("NotoDeva", "", size)
+                ov.text(x0, y1 - size * 0.22, t)
+            else:
+                ov.set_font(face, "", size)
+                ov.text(x0, y1 - size * 0.22, _txt(ov, t))
 
     return _overlay_merge(data, draw)
 
@@ -457,8 +549,30 @@ def _mcell(pdf, h, text):
         pdf.multi_cell(0, h, text, new_x="LMARGIN", new_y="NEXT", wrapmode="CHAR")
 
 
+def _assert_text_supported(pdf, *strings):
+    covered = getattr(pdf, "covered_cps", None)
+    for s in strings:
+        s = str(s)
+        if covered:
+            for ch in s:
+                cp = ord(ch)
+                # common whitespace/control chars are handled by layout/fonts
+                if ch in "\n\r\t":
+                    continue
+                if cp < 32 or cp == 127:
+                    continue
+                if cp not in covered:
+                    raise ValueError("Some characters, including emoji, aren't supported. Remove or replace them before exporting.")
+        else:
+            try:
+                s.encode("latin-1")
+            except UnicodeEncodeError:
+                raise ValueError("Some characters, including emoji, aren't supported. Remove or replace them before exporting.")
+
+
 def text_to_pdf(text: str, name: str = "document") -> bytes:
     pdf = _new_pdf()
+    _assert_text_supported(pdf, text, name)
     pdf.add_page()
     pdf.set_font(_face(pdf), "B", 9)
     pdf.set_text_color(120, 120, 120)
@@ -625,26 +739,70 @@ def pdf_to_xlsx(data: bytes) -> bytes:
 # --------------------------------------------------------------------------- #
 def word_to_pdf(data: bytes) -> bytes:
     import docx
+    from docx.oxml.ns import qn
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
 
     doc = docx.Document(io.BytesIO(data))
     pdf = _new_pdf()
     pdf.add_page()
     face = _face(pdf)
-    for para in doc.paragraphs:
+
+    def render_para(para):
         text = _txt(pdf, para.text)
         style = (para.style.name or "").lower() if para.style else ""
-        if not text.strip():
-            pdf.ln(8)
-            continue
-        if "heading 1" in style or style == "title":
-            pdf.set_font(face, "B", 18)
-        elif "heading" in style:
-            pdf.set_font(face, "B", 14)
+        if text.strip():
+            if "heading 1" in style or style == "title":
+                pdf.set_font(face, "B", 18)
+            elif "heading" in style:
+                pdf.set_font(face, "B", 14)
+            else:
+                pdf.set_font(face, size=11)
+            _mcell(pdf, 16, text)
+            pdf.ln(2)
         else:
-            pdf.set_font(face, size=11)
-        _mcell(pdf, 16, text)
-        pdf.ln(2)
+            pdf.ln(8)
+        # inline images (best-effort)
+        try:
+            for rid in para._p.xpath('.//a:blip/@r:embed'):
+                try:
+                    blob = doc.part.related_parts[rid].blob
+                    w = min(getattr(pdf, "epw", 480), 400)
+                    pdf.image(io.BytesIO(blob), w=w)
+                    pdf.ln(4)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    for child in doc.element.body.iterchildren():
+        if child.tag == qn('w:p'):
+            render_para(Paragraph(child, doc))
+        elif child.tag == qn('w:tbl'):
+            try:
+                table = Table(child, doc)
+                pdf.set_font(face, size=9)
+                with pdf.table() as t:
+                    for row in table.rows:
+                        trow = t.row()
+                        for cell in row.cells:
+                            trow.cell(_txt(pdf, cell.text))
+                pdf.ln(6)
+            except Exception:
+                pass
     return bytes(pdf.output())
+
+
+def _validate_word_range(start: int, end: int, total: int):
+    if not start and not end:
+        return None
+    if start <= 0 or end <= 0:
+        raise ValueError("Page numbers must be positive.")
+    if end < start:
+        raise ValueError("Page range must be in order, e.g. 2 or 2-3.")
+    if start > total or end > total:
+        raise ValueError(f"Page range must be within 1 and {total}.")
+    return (start, end)
 
 
 def pdf_to_word_hifi(data: bytes, start: int = 0, end: int = 0) -> bytes:
@@ -656,11 +814,12 @@ def pdf_to_word_hifi(data: bytes, start: int = 0, end: int = 0) -> bytes:
 
     with open("/hifi.pdf", "wb") as fh:
         fh.write(data)
+    total = get_page_count(data)
+    rng = _validate_word_range(int(start), int(end), total)
     kwargs = {}
-    if start:
-        kwargs["start"] = int(start) - 1   # pdf2docx: 0-based inclusive
-    if end:
-        kwargs["end"] = int(end)           # pdf2docx: 0-based exclusive
+    if rng:
+        kwargs["start"] = rng[0] - 1   # pdf2docx: 0-based inclusive
+        kwargs["end"] = rng[1]         # pdf2docx: 0-based exclusive
     cv = Converter("/hifi.pdf")
     try:
         cv.convert("/hifi.docx", **kwargs)
@@ -700,19 +859,25 @@ def pdf_to_xlsx_hifi(data: bytes) -> bytes:
     return out.getvalue()
 
 
-def pdf_to_word(data: bytes) -> bytes:
+def pdf_to_word(data: bytes, start: int = 0, end: int = 0) -> bytes:
     import docx
 
     reader = _reader(data)
+    total = len(reader.pages)
+    rng = _validate_word_range(int(start), int(end), total)
+    if rng:
+        pages = list(range(rng[0], rng[1] + 1))
+    else:
+        pages = list(range(1, total + 1))
     doc = docx.Document()
-    for i, page in enumerate(reader.pages, 1):
+    for j, pnum in enumerate(pages):
         try:
-            text = page.extract_text() or ""
+            text = reader.pages[pnum - 1].extract_text() or ""
         except Exception:
             text = ""
         for block in text.split("\n"):
             doc.add_paragraph(block)
-        if i < len(reader.pages):
+        if j < len(pages) - 1:
             doc.add_page_break()
     out = io.BytesIO()
     doc.save(out)
@@ -868,7 +1033,7 @@ def _inputs(n):
 
 def dispatch(action: str, params_json: str = "") -> str:
     p = json.loads(params_json) if params_json else {}
-    n = int(p.get("n", 1))
+    n = int(p.get("nFiles", 1))
 
     # metadata / text results return JSON directly (no /out file)
     if action == "pageCount":
@@ -914,7 +1079,8 @@ def dispatch(action: str, params_json: str = "") -> str:
         out = word_to_pdf(files[0])
     elif action == "pdfToWord":
         out = (pdf_to_word_hifi(files[0], int(p.get("start", 0)), int(p.get("end", 0)))
-               if p.get("engine") == "hifi" else pdf_to_word(files[0]))
+               if p.get("engine") == "hifi"
+               else pdf_to_word(files[0], int(p.get("start", 0)), int(p.get("end", 0))))
     elif action == "pptToPdf":
         out = ppt_to_pdf(files[0])
     elif action == "pdfToPpt":
