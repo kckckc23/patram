@@ -7,12 +7,19 @@
  * responses are stored (opaque responses are quota-padded and unusable under
  * a future cross-origin-isolated deployment).
  */
-const VERSION = "patram-sw-v7";
+const VERSION = "patram-sw-v8";
 const CORE = [
-  "./", "./index.html", "./styles.css", "./app.js", "./favicon.svg",
+  "./", "./index.html", "./styles.css", "./favicon.svg",
   "./manifest.webmanifest",
   "./worker.js", "./qpdf-worker.js", "./pdf_tools.py", "./fonts/manifest.json",
   "./patchnotes.json",
+  "./js/app.js", "./js/bridge.js", "./js/dom.js", "./js/icons.js",
+  "./js/notes.js", "./js/registry.js", "./js/router.js", "./js/workspace.js",
+  "./js/tools/assemble.js", "./js/tools/convert.js", "./js/tools/extract.js",
+  "./js/tools/from-pdf.js", "./js/tools/image-place.js", "./js/tools/ocr.js",
+  "./js/tools/optimize.js", "./js/tools/organize.js", "./js/tools/pdf-images.js",
+  "./js/tools/pdf2ppt.js", "./js/tools/protect.js", "./js/tools/qpdf-tools.js",
+  "./js/tools/split.js", "./js/tools/to-pdf.js",
 ];
 const ENGINE_HOSTS = new Set([
   "cdn.jsdelivr.net",          // pyodide, pdf.js, tesseract.js, jszip, qpdf, mammoth
