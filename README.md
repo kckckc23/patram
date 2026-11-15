@@ -67,9 +67,6 @@ The visual language is a digital palm-leaf scriptorium — a palette named for t
 pigments of Indian manuscripts (haldi/turmeric, sindoor/vermilion, neel/indigo,
 mehendi/henna) on an aged palm-leaf ground, set in Rozha One, Mukta and JetBrains Mono.
 
-Design explorations live in `poc/` (`layouts.html` for layout studies, `fonts.html`
-for body-font comparisons) — reference only, not shipped.
-
 ## Run locally
 
 It's static — any web server works (a server is needed so the Web Workers can load;
@@ -88,33 +85,17 @@ engines download only when their tool is first used. After that it runs offline.
 Static hosting, zero build. On **Vercel**, import the repo — `vercel.json` sets it to
 serve the root with no build step. Any static host (Netlify, GitHub Pages, S3) works too.
 
-## Tests
+## Development
 
-Two harnesses plus a fidelity benchmark, all dev-only (`test/node_modules` is never
-deployed):
-
-**`verify.mjs`** — boots Pyodide in Node and drives every operation in `pdf_tools.py`
-against generated fixtures, plus the qpdf.wasm operations and the Unicode font paths.
-A fast, browserless end-to-end check of the engines:
+Serve the repo locally with any static web server (workers require `http(s)`, not `file://`):
 
 ```bash
-cd test && npm install
-node verify.mjs          # core engine + qpdf + fonts
-node verify.mjs --full   # also PyMuPDF, pdf2docx, pdfplumber (~40 MB download, once)
+python3 -m http.server 8000
+# open http://localhost:8000
 ```
 
-**`smoke.mjs`** — launches headless Chromium (Puppeteer) against the running site,
-boots the real engine in the browser, and drives the UI for two tools. Serve the site
-on port `8231` first:
-
-```bash
-python3 -m http.server 8231        # in one terminal
-cd test && npm install && node smoke.mjs   # in another
-```
-
-**`test/fidelity/`** — the conversion-fidelity benchmark (corpus of Office documents,
-reference renders from LibreOffice/Word, SSIM scorecards). See `test/fidelity/README.md`
-and `plan.md` §7.
+When changing the Pyodide boot packages in `worker.js`, keep the pinned `BOOT_PACKAGES`
+list in sync with the libraries the runtime actually needs.
 
 ## Roadmap
 
