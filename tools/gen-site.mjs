@@ -95,6 +95,8 @@ function footerNav(currentSlug) {
     const cls = t.slug === currentSlug ? ' class="current"' : "";
     return `<a${cls} href="/${t.slug}">${esc(t.name)}</a>`;
   });
+  const privacyCls = currentSlug === "privacy" ? ' class="current"' : "";
+  items.push(`<a${privacyCls} href="/privacy">Privacy</a>`);
   return `<nav class="tool-nav" aria-label="All PDF tools">\n      ${items.join("\n      ")}\n    </nav>`;
 }
 
@@ -169,12 +171,99 @@ ${nav}
 `;
 }
 
+function privacyPageHtml() {
+  const title = "Privacy - what Patram does with your files | Patram";
+  const metaDesc = "What Patram does with your files: on-device WebAssembly processing, when network access is needed, and how you can verify privacy claims yourself.";
+  const canonical = `${BASE}/privacy`;
+  const nav = footerNav("privacy");
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: title,
+    description: metaDesc,
+    url: canonical,
+    isPartOf: {
+      "@type": "WebApplication",
+      name: "Patram",
+      url: `${BASE}/`,
+    },
+  };
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${esc(title)}</title>
+  <meta name="description" content="${esc(metaDesc)}" />
+  <link rel="canonical" href="${canonical}" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Patram" />
+  <meta property="og:title" content="${esc(title)}" />
+  <meta property="og:description" content="${esc(metaDesc)}" />
+  <meta property="og:url" content="${canonical}" />
+  <meta property="og:image" content="${BASE}/og.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Patram — free PDF tools that run in your browser. No upload, ever." />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${esc(title)}" />
+  <meta name="twitter:description" content="${esc(metaDesc)}" />
+  <meta name="twitter:image" content="${BASE}/og.png" />
+  <meta name="theme-color" content="#c0261d" />
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="stylesheet" href="./styles.css" />
+  <script type="application/ld+json">${JSON.stringify(jsonLd)}</script>
+</head>
+<body>
+  <main class="tool-page" id="main">
+    <p><a href="/">← Back to all tools</a></p>
+    <h1>Privacy</h1>
+
+    <section>
+      <h2>The short version</h2>
+      <p>Your files are processed on your own device by WebAssembly engines; they are never uploaded; there is no account.</p>
+    </section>
+
+    <section>
+      <h2>What needs the network, and when</h2>
+      <p>The site itself and its engines (Pyodide, qpdf, pdf.js, tesseract.js) load from cdn.jsdelivr.net on first use. OCR additionally downloads language data and needs a connection while recognizing. Heavy engines (pdf2docx, pdfplumber, PyMuPDF) download once, on demand, with the size shown first. After download, engines are cached and tools work offline.</p>
+    </section>
+
+    <section>
+      <h2>What to check yourself</h2>
+      <p>DevTools network tab shows engine downloads on first use and no file uploads ever. DevTools &gt; Application &gt; Cache Storage shows what the service worker stored. The full source is at <a href="https://github.com/kckckc23/patram">github.com/kckckc23/patram</a> (AGPL-3.0).</p>
+    </section>
+
+    <section>
+      <h2>Hosting</h2>
+      <p>The site is served by Vercel, which processes standard web server logs (IP address, browser) as any host does, and loads Vercel Web Analytics (anonymous page-view counts, no cookies). No ads, no third-party trackers, no file content leaves the device.</p>
+    </section>
+
+    <section>
+      <h2>Contact</h2>
+      <p>Contact: the GitHub repo's issue tracker at <a href="https://github.com/kckckc23/patram/issues">github.com/kckckc23/patram/issues</a>.</p>
+    </section>
+  </main>
+
+  <footer class="tool-page-footer">
+    <p><a href="/">All Patram tools</a></p>
+${nav}
+  </footer>
+</body>
+</html>
+`;
+}
+
 const sitemapEntries = [urlEntry(`${BASE}/`, "1.0")];
 for (const tool of toolList) {
   sitemapEntries.push(urlEntry(tool.url, "0.8"));
   const html = toolPageHtml(tool);
   writeFileSync(fileURLToPath(new URL(`${tool.slug}.html`, ROOT)), html);
 }
+sitemapEntries.push(urlEntry(`${BASE}/privacy`, "0.5"));
+writeFileSync(fileURLToPath(new URL("privacy.html", ROOT)), privacyPageHtml());
 
 const sitemapXml = [
   '<?xml version="1.0" encoding="UTF-8"?>',
@@ -186,4 +275,4 @@ const sitemapXml = [
 
 writeFileSync(SITEMAP_OUT, sitemapXml);
 console.log(`sitemap.xml written — ${sitemapEntries.length} URL(s), lastmod ${today}`);
-console.log(`Generated ${toolList.length} tool page(s) at repo root`);
+console.log(`Generated ${toolList.length} tool page(s) and privacy.html at repo root`);
