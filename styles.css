@@ -583,3 +583,48 @@ h1, h2, h3 { margin: 0; font-family: var(--display); font-weight: 400; letter-sp
 .engine-hint { display: flex; align-items: flex-start; gap: 8px; margin-top: 10px;
   font-family: var(--mono); font-size: 11px; line-height: 1.55; letter-spacing: .02em; color: var(--ink-2); }
 .engine-hint svg { width: 14px; height: 14px; color: var(--mehendi); flex: none; margin-top: 1px; }
+
+/* ---- static tool & privacy pages ---------------------------------------- */
+.tool-page {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 32px 20px 48px;
+  font-family: var(--sans);
+  color: var(--ink);
+}
+.tool-page h1,
+.tool-page h2 {
+  font-family: var(--display);
+  font-weight: 400;
+  color: var(--ink);
+  line-height: 1.2;
+}
+.tool-page h1 { font-size: 2rem; margin: 0 0 16px; }
+.tool-page h2 { font-size: 1.3rem; margin: 28px 0 10px; }
+.tool-page p, .tool-page li { line-height: 1.65; }
+.tool-page ol { padding-left: 1.25rem; margin: 0 0 20px; }
+.open-tool {
+  display: inline-block;
+  background: #c0261d;
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: var(--r-ctrl, 9px);
+  font-weight: 600;
+  text-decoration: none;
+}
+.open-tool:hover { background: var(--sindoor-press, #98170f); color: #fff; text-decoration: none; }
+.tool-page-footer {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 20px 20px 40px;
+  border-top: 1px solid var(--line, #ddc794);
+}
+.tool-nav, .foot-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 12px;
+}
+.tool-nav a, .foot-tools a { color: var(--ink-2, #6f5636); }
+.tool-nav a:hover, .foot-tools a:hover { color: var(--ink, #2c1e12); }
+.tool-nav a.current { color: var(--ink, #2c1e12); font-weight: 600; }
