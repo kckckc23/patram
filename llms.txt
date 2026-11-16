@@ -40,5 +40,6 @@
 
 - [Site](https://patrampdf.karanchauhan.me)
 - [Privacy](https://patrampdf.karanchauhan.me/privacy): what runs on-device, what needs the network
+- [iLovePDF alternative](https://patrampdf.karanchauhan.me/ilovepdf-alternative): comparison of Patram and iLovePDF
 - [Source](https://github.com/kckckc23/patram)
 - [License](https://github.com/kckckc23/patram/blob/main/LICENSE): AGPL-3.0
