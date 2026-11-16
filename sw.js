@@ -7,7 +7,7 @@
  * responses are stored (opaque responses are quota-padded and unusable under
  * a future cross-origin-isolated deployment).
  */
-const VERSION = "patram-sw-v10";
+const VERSION = "patram-sw-v11";
 const CORE = [
   "./", "./index.html", "./styles.css", "./favicon.svg",
   "./manifest.webmanifest",

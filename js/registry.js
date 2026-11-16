@@ -20,7 +20,7 @@ export const TOOLS = [
     engine: "stamp" },
   { id: "imgOnPdf", name: "Add image to PDF", badge: "PYTHON",
     desc: "Drop a logo, signature or photo anywhere on a page, then save.",
-    keys: "signature sign logo photo picture insert place overlay paste seal",
+    keys: "signature sign logo photo picture insert place overlay paste",
     engine: "imgOnPdf", accept: ".pdf" },
 
   { group: "Optimize" },

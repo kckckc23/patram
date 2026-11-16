@@ -110,33 +110,7 @@ function applyRoute() {
 }
 
 /* ---- welcome / boot readout --------------------------------------------- */
-function sealSVG() {
-  const petals = [];
-  for (let i = 0; i < 8; i++)
-    petals.push(`<path d="M100 100 C116 60 116 38 100 20 C84 38 84 60 100 100 Z" transform="rotate(${i * 45} 100 100)"/>`);
-  const inner = [];
-  for (let i = 0; i < 8; i++)
-    inner.push(`<path d="M100 100 C110 74 110 58 100 46 C90 58 90 74 100 100 Z" transform="rotate(${i * 45 + 22.5} 100 100)"/>`);
-  const dots = [];
-  for (let i = 0; i < 16; i++) {
-    const a = (i * 22.5 * Math.PI) / 180;
-    dots.push(`<circle cx="${(100 + 92 * Math.cos(a)).toFixed(1)}" cy="${(100 + 92 * Math.sin(a)).toFixed(1)}" r="2.4"/>`);
-  }
-  return `<svg viewBox="0 0 200 200" role="img" aria-label="Patram seal">
-    <circle cx="100" cy="100" r="97" fill="none" stroke="#b6862c" stroke-width="1.5"/>
-    <g class="rot">
-      <g fill="#e79310" opacity=".92">${petals.join("")}</g>
-      <g fill="#c0261d" opacity=".9">${inner.join("")}</g>
-      <g fill="#b6862c">${dots.join("")}</g>
-    </g>
-    <circle cx="100" cy="100" r="82" fill="none" stroke="#1d3a63" stroke-width="1.2" opacity=".55"/>
-    <circle cx="100" cy="100" r="17" fill="#c0261d" stroke="#b6862c" stroke-width="1.5"/>
-    <circle cx="100" cy="100" r="6" fill="#e79310"/>
-  </svg>`;
-}
 function renderHero() {
-  const seal = $("#seal");
-  if (seal) seal.innerHTML = sealSVG();
   const pledges = $("#pledges");
   if (pledges) {
     ["No file upload", "Files never leave this device", "Engines download once, then run offline"].forEach((t) =>

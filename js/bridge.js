@@ -11,6 +11,7 @@ const bootLog = [];
 export function setRuntime(state, msg) {
   if (runtimeEl) runtimeEl.dataset.state = state;
   if (msg && rtMsg) rtMsg.textContent = msg;
+  if (state === "ready") $("#bootReadout")?.classList.add("done");
 }
 
 export function pushBoot(msg, done) {
@@ -20,10 +21,15 @@ export function pushBoot(msg, done) {
 }
 
 export function renderBoot(box) {
-  box.innerHTML = bootLog.map((l) =>
+  const lines = bootLog.map((l) =>
     `<span class="l"><span class="${l.done ? "ok" : "dim"}">${l.done ? "✓" : "›"}</span> ${escapeHtml(l.msg)}</span>`
   ).join("") + (engineState.ready ? "" : `<span class="l"><span class="caret">▍</span></span>`);
-  box.scrollTop = box.scrollHeight;
+  if (box.classList.contains("done")) {
+    box.innerHTML = `<details class="boot-details"><summary>engine ready · on-device</summary><div class="boot-log">${lines}</div></details>`;
+  } else {
+    box.innerHTML = lines;
+    box.scrollTop = box.scrollHeight;
+  }
 }
 
 export function getBootLog() { return bootLog; }
