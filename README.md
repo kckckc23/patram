@@ -63,9 +63,9 @@ all tools* returns to the index. Heavy tools state their one-time engine downloa
 before the first run. The layout is fully responsive: the sidebar folds into a banner
 on tablets and stacks on phones.
 
-The visual language is a digital palm-leaf scriptorium — a palette named for the
-pigments of Indian manuscripts (haldi/turmeric, sindoor/vermilion, neel/indigo,
-mehendi/henna) on an aged palm-leaf ground, set in Rozha One, Mukta and JetBrains Mono.
+The visual language is contemporary editorial utility — Source Serif 4 for display,
+Inter for UI, and JetBrains Mono for data, on a flat neutral ground with one
+deep-green accent.
 
 ## Run locally
 

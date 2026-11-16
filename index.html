@@ -19,13 +19,13 @@
   <meta name="twitter:title" content="Patram — free PDF tools in your browser. No upload, ever." />
   <meta name="twitter:description" content="Merge, split, compress, protect, OCR and convert documents — processed on your device. Free, open source, works offline after first load." />
   <meta name="twitter:image" content="https://patrampdf.karanchauhan.me/og.png" />
-  <meta name="theme-color" content="#c0261d" />
+  <meta name="theme-color" content="#14532d" />
   <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-  <link href="https://fonts.googleapis.com/css2?family=Rozha+One&family=Mukta:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
   
   <script defer src="/_vercel/insights/script.js"></script>
@@ -59,7 +59,7 @@
         <span class="glyph" aria-hidden="true">प</span>
         <span>
           <b>Patram<span class="tld" lang="sa"> पत्रम्</span></b>
-          <small>on-device document studio</small>
+          <small>PDF tools. On your device.</small>
         </span>
       </div>
 
@@ -68,64 +68,55 @@
         Patch notes
       </button>
 
-      <!-- signature: live engine readout, styled as a scribe's seal -->
+      <!-- live engine readout -->
       <div class="runtime" id="runtime" data-state="booting" role="status" aria-live="polite" title="The Python engine runs on your machine">
         <span class="led" aria-hidden="true"></span>
         <span class="rt-msg" id="rtMsg">starting…</span>
       </div>
     </header>
 
-    <main class="studio" id="main">
-      <!-- identity / thesis — persistent, sticky -->
-      <aside class="hero-panel">
-        <div class="seal" id="seal" aria-hidden="true"></div>
-        <div class="hero-copy">
-          <span class="eyebrow">Private document studio</span>
-          <h1>Work your PDFs. Nothing ever <span class="u">leaves this device</span>.</h1>
-          <p class="lede">Merge, split, compress, OCR and convert — powered by Python
-            compiled to WebAssembly, running right here in your browser. No account,
-            no upload, no server.</p>
-          <p class="origin"><b>Patram</b> — <span lang="sa">पत्रम्</span>, Sanskrit for “leaf, page” — the palm
-            leaf that Indian scribes wrote on for centuries. Yours stay just as private.</p>
-        </div>
+    <main id="main">
+      <section class="intro">
+        <h1>Work your PDFs. Nothing ever <span class="u">leaves this device</span>.</h1>
+        <p class="lede">Merge, split, compress, OCR and convert — powered by Python
+          compiled to WebAssembly, running right here in your browser. No account,
+          no upload, no server.</p>
+        <div class="pledges" id="pledges"></div>
         <div class="boot-readout" id="bootReadout"></div>
         <div class="boot-readout svc-readout" id="svcReadout" hidden></div>
-        <div class="pledges" id="pledges"></div>
-      </aside>
-
-      <section class="main-col">
-        <!-- illuminated index: filter, search, card grid -->
-        <div class="index" id="index">
-          <div class="index-bar">
-            <div class="pills" id="pills" role="group" aria-label="Filter tools by category"></div>
-            <div class="search">
-              <span class="si" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg></span>
-              <input id="toolSearch" type="search" placeholder="Search all tools…" autocomplete="off" aria-label="Search tools" />
-              <span class="kbd" aria-hidden="true">⌘K</span>
-            </div>
-          </div>
-          <div class="tool-grid" id="grid"></div>
-          <p class="empty" id="empty" hidden>No tool matches — try “merge”, “ocr”, or “word”.</p>
-        </div>
-
-        <!-- patch notes: generated from the git history into patchnotes.json -->
-        <div class="notes" id="notes" hidden>
-          <button class="back" id="notesBack" type="button">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
-            Back to all tools
-          </button>
-          <section class="stage" id="notesStage" aria-live="polite"></section>
-        </div>
-
-        <!-- workbench: opens in place when a tool is chosen -->
-        <div class="workbench" id="workbench" hidden>
-          <button class="back" id="back" type="button">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
-            Back to all tools
-          </button>
-          <section class="stage" id="stage" aria-live="polite"></section>
-        </div>
       </section>
+
+      <!-- illuminated index: filter, search, card grid -->
+      <div class="index" id="index">
+        <div class="index-bar">
+          <div class="pills" id="pills" role="group" aria-label="Filter tools by category"></div>
+          <div class="search">
+            <span class="si" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg></span>
+            <input id="toolSearch" type="search" placeholder="Search all tools…" autocomplete="off" aria-label="Search tools" />
+            <span class="kbd" aria-hidden="true">⌘K</span>
+          </div>
+        </div>
+        <div class="tool-grid" id="grid"></div>
+        <p class="empty" id="empty" hidden>No tool matches — try “merge”, “ocr”, or “word”.</p>
+      </div>
+
+      <!-- patch notes: generated from the git history into patchnotes.json -->
+      <div class="notes" id="notes" hidden>
+        <button class="back" id="notesBack" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+          Back to all tools
+        </button>
+        <section class="stage" id="notesStage" aria-live="polite"></section>
+      </div>
+
+      <!-- workbench: opens in place when a tool is chosen -->
+      <div class="workbench" id="workbench" hidden>
+        <button class="back" id="back" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+          Back to all tools
+        </button>
+        <section class="stage" id="stage" aria-live="polite"></section>
+      </div>
     </main>
 
     <footer class="foot">
@@ -156,6 +147,7 @@
         <a href="/pdf-to-excel">PDF → Excel</a>
         <a href="/pdf-to-powerpoint">PDF → PowerPoint</a>
         <a href="/privacy">Privacy</a>
+        <a href="/ilovepdf-alternative">iLovePDF alternative</a>
       </nav>
     </footer>
   </div>
