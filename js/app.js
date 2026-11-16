@@ -139,7 +139,7 @@ function renderHero() {
   if (seal) seal.innerHTML = sealSVG();
   const pledges = $("#pledges");
   if (pledges) {
-    ["No file upload", "Runs offline once loaded", "Open the network tab — it stays quiet"].forEach((t) =>
+    ["No file upload", "Files never leave this device", "Engines download once, then run offline"].forEach((t) =>
       pledges.appendChild(el("span", { class: "pledge" }, `${I.shield}${t}`)));
   }
   const boot = $("#bootReadout");

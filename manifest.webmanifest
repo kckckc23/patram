@@ -1,7 +1,7 @@
 {
   "name": "Patram — private document studio",
   "short_name": "Patram",
-  "description": "Merge, split, compress, protect, OCR and convert PDFs — processed entirely on your device. No upload, no account, works offline.",
+  "description": "Merge, split, compress, protect, OCR and convert PDFs — processed entirely on your device. No upload, no account, works offline once engines are cached.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
