@@ -68,8 +68,15 @@ function esc(s) {
     .replace(/"/g, "&quot;");
 }
 
+const KW_ACRONYMS = { pdf: "PDF", jpg: "JPG", ocr: "OCR", powerpoint: "PowerPoint" };
 function capKw(kw) {
-  return kw.replace(/\b\w/g, (c) => c.toUpperCase());
+  return kw
+    .split(" ")
+    .map((w, i) => KW_ACRONYMS[w] ?? (w === "to" && i > 0 ? "to" : w[0].toUpperCase() + w.slice(1)))
+    .join(" ");
+}
+function dispKw(kw) {
+  return kw.replace(/\b(pdf|jpg|ocr|powerpoint)\b/g, (m) => KW_ACRONYMS[m]);
 }
 
 function urlEntry(loc, priority) {
@@ -165,7 +172,7 @@ function toolPageHtml(tool) {
   const nav = footerNav(tool.slug);
 
   const faqs = [
-    { q: `Is ${meta.kw} free?`, a: `Yes. ${kwCap} with Patram is completely free.` },
+    { q: `Is ${dispKw(meta.kw)} free?`, a: `Yes. ${kwCap} with Patram is completely free.` },
     { q: "Do my files get uploaded?", a: "No. Your files are processed on your device in your browser and are never uploaded." },
     ...meta.faqs,
   ];
