@@ -7,7 +7,7 @@
  * responses are stored (opaque responses are quota-padded and unusable under
  * a future cross-origin-isolated deployment).
  */
-const VERSION = "patram-sw-v8";
+const VERSION = "patram-sw-v9";
 const CORE = [
   "./", "./index.html", "./styles.css", "./favicon.svg",
   "./manifest.webmanifest",
@@ -20,6 +20,29 @@ const CORE = [
   "./js/tools/optimize.js", "./js/tools/organize.js", "./js/tools/pdf-images.js",
   "./js/tools/pdf2ppt.js", "./js/tools/protect.js", "./js/tools/qpdf-tools.js",
   "./js/tools/split.js", "./js/tools/to-pdf.js",
+  "./merge-pdf.html",
+  "./split-pdf.html",
+  "./delete-pdf-pages.html",
+  "./organize-pdf.html",
+  "./stamp-pdf.html",
+  "./add-image-to-pdf.html",
+  "./compress-pdf.html",
+  "./linearize-pdf.html",
+  "./protect-pdf.html",
+  "./unlock-pdf.html",
+  "./repair-pdf.html",
+  "./strip-pdf-metadata.html",
+  "./pdf-to-text.html",
+  "./ocr-pdf.html",
+  "./pdf-to-images.html",
+  "./images-to-pdf.html",
+  "./text-to-pdf.html",
+  "./word-to-pdf.html",
+  "./excel-to-pdf.html",
+  "./powerpoint-to-pdf.html",
+  "./pdf-to-word.html",
+  "./pdf-to-excel.html",
+  "./pdf-to-powerpoint.html",
 ];
 const ENGINE_HOSTS = new Set([
   "cdn.jsdelivr.net",          // pyodide, pdf.js, tesseract.js, jszip, qpdf, mammoth

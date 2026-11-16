@@ -1,0 +1,43 @@
+# Patram
+
+> free, open-source (AGPL-3.0) PDF tools that run entirely in the browser via WebAssembly - no upload, no account, files never leave the device.
+
+## Tools
+
+- [Merge PDFs](https://patrampdf.karanchauhan.me/merge-pdf): Combine several PDFs into one. Drag or use the arrows to order them.
+- [Split PDF](https://patrampdf.karanchauhan.me/split-pdf): Keep a single range of pages as a new document.
+- [Delete pages](https://patrampdf.karanchauhan.me/delete-pdf-pages): Remove pages by number or range, e.g. 2, 5-8.
+- [Organize & rotate](https://patrampdf.karanchauhan.me/organize-pdf): Reorder, rotate, or drop pages, then rebuild the PDF.
+- [Stamp & page numbers](https://patrampdf.karanchauhan.me/stamp-pdf): Add a watermark, header/footer text, or page numbers.
+- [Add image to PDF](https://patrampdf.karanchauhan.me/add-image-to-pdf): Drop a logo, signature or photo anywhere on a page, then save.
+- [Compress PDF](https://patrampdf.karanchauhan.me/compress-pdf): Shrink file size — lossless cleanup up to full image downsampling.
+- [Linearize PDF](https://patrampdf.karanchauhan.me/linearize-pdf): Optimize for fast page-by-page web viewing (qpdf).
+- [Protect PDF](https://patrampdf.karanchauhan.me/protect-pdf): Encrypt with a password — AES-256, applied on your device.
+- [Unlock PDF](https://patrampdf.karanchauhan.me/unlock-pdf): Remove a password you know from a PDF.
+- [Repair PDF](https://patrampdf.karanchauhan.me/repair-pdf): Rebuild a damaged file's structure (cross-reference recovery).
+- [Strip metadata](https://patrampdf.karanchauhan.me/strip-pdf-metadata): Remove author, title, software traces and XMP data from a PDF.
+- [PDF → Text](https://patrampdf.karanchauhan.me/pdf-to-text): Pull the selectable text layer out of a PDF.
+- [OCR scanned PDF](https://patrampdf.karanchauhan.me/ocr-pdf): Read text from scanned/image PDFs with on-device OCR.
+- [PDF → Images](https://patrampdf.karanchauhan.me/pdf-to-images): Render each page to a JPG — save one, all of them, or a zip.
+- [Images → PDF](https://patrampdf.karanchauhan.me/images-to-pdf): Place JPG/PNG images onto pages, one per image.
+- [Text → PDF](https://patrampdf.karanchauhan.me/text-to-pdf): Type or paste text (or load a .txt) and export a PDF.
+- [Word → PDF](https://patrampdf.karanchauhan.me/word-to-pdf): Convert a .docx to PDF — quick re-typeset, or full formatting via your browser's print engine.
+- [Excel / CSV → PDF](https://patrampdf.karanchauhan.me/excel-to-pdf): Render a spreadsheet as a formatted table PDF.
+- [PowerPoint → PDF](https://patrampdf.karanchauhan.me/powerpoint-to-pdf): Lay out each slide's text on a landscape PDF.
+- [PDF → Word](https://patrampdf.karanchauhan.me/pdf-to-word): Rebuild an editable .docx — flowing text, tables and images.
+- [PDF → Excel](https://patrampdf.karanchauhan.me/pdf-to-excel): Detect real tables into an .xlsx workbook, sheet per page.
+- [PDF → PowerPoint](https://patrampdf.karanchauhan.me/pdf-to-powerpoint): Each page becomes a slide, pixel-faithful — or extract editable text instead.
+
+## How it works
+
+- Processing happens on the user's device (Python via Pyodide, qpdf WASM, pdf.js, tesseract.js).
+- Engines load from CDN on first use, then are cached for offline use.
+- OCR and first-time engine downloads need a network connection.
+- Nothing is uploaded; files never leave the device.
+- No account or signup is required.
+
+## Links
+
+- [Site](https://patrampdf.karanchauhan.me)
+- [Source](https://github.com/kckckc23/patram)
+- [License](https://github.com/kckckc23/patram/blob/main/LICENSE): AGPL-3.0
