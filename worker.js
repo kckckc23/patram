@@ -31,18 +31,23 @@ const BOOT_PACKAGES = [
 let pyodide = null;
 
 async function boot() {
-  post("boot", { phase: "runtime", msg: "Fetching Python runtime (WebAssembly)…" });
+  const warm = self.caches ? !!(await caches.match(BASE + "pyodide.asm.wasm")) : false;
+  if (warm) {
+    post("boot", { phase: "runtime", msg: "Starting engine from this device's cache…" });
+  } else {
+    post("boot", { phase: "runtime", msg: "Fetching Python runtime (WebAssembly)…" });
+  }
   const { loadPyodide } = await import(BASE + "pyodide.mjs");
   pyodide = await loadPyodide({ indexURL: BASE });
 
-  post("boot", { phase: "packages", msg: "Loading Pillow + lxml…" });
+  if (!warm) post("boot", { phase: "packages", msg: "Loading Pillow + lxml…" });
   await pyodide.loadPackage(["micropip", "Pillow", "lxml"]);
 
-  post("boot", { phase: "packages", msg: "Installing pypdf, openpyxl, fpdf2, python-docx, python-pptx…" });
+  if (!warm) post("boot", { phase: "packages", msg: "Installing pypdf, openpyxl, fpdf2, python-docx, python-pptx…" });
   const micropip = pyodide.pyimport("micropip");
   await micropip.install(BOOT_PACKAGES);
 
-  post("boot", { phase: "module", msg: "Loading engine…" });
+  if (!warm) post("boot", { phase: "module", msg: "Loading engine…" });
   pyodide.runPython(await (await fetch("./pdf_tools.py")).text());
 
   post("ready", { msg: "Engine ready" });
